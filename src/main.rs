@@ -11,7 +11,7 @@
 
 use std::{
     fs::{self, File},
-    io::{stderr, Write},
+    io::{stderr, BufWriter, Write},
     path::Path,
     sync::Arc,
 };
@@ -479,7 +479,7 @@ fn main() {
             .join(format!("image_{}", index))
             .with_extension("json");
 
-        let file = File::create(file_path).expect("Can open file.");
+        let file = BufWriter::new(File::create(file_path).expect("Can open file."));
         serde_json::to_writer(file, &image_ndarray).expect("Can write file.");
 
         eprintln!(" - Done!");
