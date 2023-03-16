@@ -90,24 +90,26 @@ fn random_scene() -> World {
     world
 }
 
-// fn ray_color(r: &Ray, w: &World, depth: usize) -> Color {
-//     if depth <= 0 {
-//         return Color::new(0.0, 0.0, 0.0);
-//     }
+#[allow(dead_code)]
+fn ray_color(r: &Ray, w: &World, depth: usize) -> Color {
+    if depth <= 0 {
+        return Color::new(0.0, 0.0, 0.0);
+    }
 
-//     if let Some(hit) = w.hit(r, 0.001, f64::INFINITY) {
-//         if let Some((attenuation, scatter)) = hit.material.scatter(r, &hit) {
-//             attenuation * ray_color(&scatter, w, depth - 1)
-//         } else {
-//             Color::new(0.0, 0.0, 0.0)
-//         }
-//     } else {
-//         let unit_direction = r.direction.normalized();
-//         let t = 0.5 * (unit_direction.y() + 1.0);
-//         (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0)
-//     }
-// }
+    if let Some(hit) = w.hit(r, 0.001, f64::INFINITY) {
+        if let Some((attenuation, scatter)) = hit.material.scatter(r, &hit) {
+            attenuation * ray_color(&scatter, w, depth - 1)
+        } else {
+            Color::new(0.0, 0.0, 0.0)
+        }
+    } else {
+        let unit_direction = r.direction.normalized();
+        let t = 0.5 * (unit_direction.y() + 1.0);
+        (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0)
+    }
+}
 
+#[allow(dead_code)]
 fn ray_color_no_scatter(r: &Ray, w: &World) -> Color {
     if let Some(hit) = w.hit(r, 0.001, f64::INFINITY) {
         if let Some((attenuation, _)) = hit.material.scatter(r, &hit) {
@@ -402,7 +404,7 @@ fn main() {
     const ASPECT_RATIO: f64 = 1.0 / 1.0;
     const IMAGE_WIDTH: usize = 256;
     const IMAGE_HEIGHT: usize = (IMAGE_WIDTH as f64 / ASPECT_RATIO) as usize;
-    const SAMPLES_PER_PIXEL: usize = 1;
+    // const SAMPLES_PER_PIXEL: usize = 1;
     // const MAX_DEPTH: usize = 50;
 
     // World
@@ -427,38 +429,31 @@ fn main() {
         should_blur,
     );
 
-    println!("P3");
-    println!("{} {}", IMAGE_WIDTH, IMAGE_HEIGHT);
-    println!("255");
-
+    let mut image_ndarray = vec![];
     for j in (0..IMAGE_HEIGHT).rev() {
         eprint!("\rScanlines remaining {:?}", IMAGE_HEIGHT - j - 1);
         stderr().flush().unwrap();
-
-        let scanline: Vec<Color> = (0..IMAGE_WIDTH)
+        let scanline: Vec<_> = (0..IMAGE_WIDTH)
             .into_par_iter()
             .map(|i| {
                 let mut rng = rand::thread_rng();
-                let mut pixel_color = Color::new(0.0, 0.0, 0.0);
-                for _ in 0..SAMPLES_PER_PIXEL {
-                    let random_u: f64 = rng.gen();
-                    let random_v: f64 = rng.gen();
 
-                    let u: f64 = (i as f64 + random_u) / (IMAGE_WIDTH - 1) as f64;
-                    let v: f64 = (j as f64 + random_v) / (IMAGE_HEIGHT - 1) as f64;
+                let random_u: f64 = rng.gen();
+                let random_v: f64 = rng.gen();
 
-                    let r = camera.ray(u, v);
-                    pixel_color += ray_color_no_scatter(&r, &w);
-                }
-                pixel_color
+                let u = (i as f64 + random_u) / (IMAGE_WIDTH - 1) as f64;
+                let v = (i as f64 + random_v) / (IMAGE_HEIGHT - 1) as f64;
+
+                let r = camera.ray(u, v);
+                ray_color_as_output(&r, &w)
             })
             .collect();
-
-        for pixel_color in scanline {
-            println!("{}", pixel_color.format_color(SAMPLES_PER_PIXEL));
-        }
+        image_ndarray.push(scanline);
     }
-    eprintln!("\nDone.");
 
-    println!("Hello, world!");
+    let image_json = serde_json::to_string(&image_ndarray).expect("Well-formed.");
+
+    println!("{}", image_json);
+
+    eprintln!("\nDone!");
 }
