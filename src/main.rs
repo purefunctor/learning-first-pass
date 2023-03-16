@@ -10,10 +10,13 @@
  */
 
 use std::{
+    fs::{self, File},
     io::{stderr, Write},
+    path::Path,
     sync::Arc,
 };
 
+use clap::Parser;
 use rand::Rng;
 
 use hittable::{Hittable, World};
@@ -399,7 +402,23 @@ fn ray_color_as_output(r: &Ray, w: &World) -> [f64; 24] {
     }
 }
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(help = "Start a batch from this index", default_value = "0")]
+    batch_start: usize,
+    #[arg(help = "Generate a batch until this index", default_value = "100")]
+    batch_end: usize,
+}
+
 fn main() {
+    let cli = Args::parse();
+
+    let output_path = Path::new("output");
+    if !output_path.exists() {
+        fs::create_dir(output_path).unwrap();
+    }
+
     // Image
     const ASPECT_RATIO: f64 = 1.0 / 1.0;
     const IMAGE_WIDTH: usize = 256;
@@ -407,53 +426,66 @@ fn main() {
     // const SAMPLES_PER_PIXEL: usize = 1;
     // const MAX_DEPTH: usize = 50;
 
-    // World
-    let w = random_scene();
+    for index in cli.batch_start..cli.batch_end {
+        // World
+        let w = random_scene();
 
-    // Camera
-    let look_from = Point3::new(13.0, 2.0, 3.0);
-    let look_at = Point3::new(0.0, 0.0, 0.0);
-    let v_up = Vec3::new(0.0, 1.0, 0.0);
-    let distance_to_focus = 10.0;
-    let aperture = 0.1;
-    let should_blur = false;
+        // Camera
+        let look_from = Point3::new(13.0, 2.0, 3.0);
+        let look_at = Point3::new(0.0, 0.0, 0.0);
+        let v_up = Vec3::new(0.0, 1.0, 0.0);
+        let distance_to_focus = 10.0;
+        let aperture = 0.1;
+        let should_blur = false;
 
-    let camera = Camera::new(
-        look_from,
-        look_at,
-        v_up,
-        20.0,
-        ASPECT_RATIO,
-        aperture,
-        distance_to_focus,
-        should_blur,
-    );
+        let camera = Camera::new(
+            look_from,
+            look_at,
+            v_up,
+            20.0,
+            ASPECT_RATIO,
+            aperture,
+            distance_to_focus,
+            should_blur,
+        );
 
-    let mut image_ndarray = vec![];
-    for j in (0..IMAGE_HEIGHT).rev() {
-        eprint!("\rScanlines remaining {:?}", IMAGE_HEIGHT - j - 1);
-        stderr().flush().unwrap();
-        let scanline: Vec<_> = (0..IMAGE_WIDTH)
-            .into_par_iter()
-            .map(|i| {
-                let mut rng = rand::thread_rng();
+        let mut image_ndarray = vec![];
+        for j in (0..IMAGE_HEIGHT).rev() {
+            eprint!(
+                "\r{} - Scanlines remaining {:?}",
+                index,
+                IMAGE_HEIGHT - j - 1
+            );
+            stderr().flush().unwrap();
+            let scanline: Vec<_> = (0..IMAGE_WIDTH)
+                .into_par_iter()
+                .map(|i| {
+                    let mut rng = rand::thread_rng();
 
-                let random_u: f64 = rng.gen();
-                let random_v: f64 = rng.gen();
+                    let random_u: f64 = rng.gen();
+                    let random_v: f64 = rng.gen();
 
-                let u = (i as f64 + random_u) / (IMAGE_WIDTH - 1) as f64;
-                let v = (i as f64 + random_v) / (IMAGE_HEIGHT - 1) as f64;
+                    let u = (i as f64 + random_u) / (IMAGE_WIDTH - 1) as f64;
+                    let v = (i as f64 + random_v) / (IMAGE_HEIGHT - 1) as f64;
 
-                let r = camera.ray(u, v);
-                ray_color_as_output(&r, &w)
-            })
-            .collect();
-        image_ndarray.push(scanline);
+                    let r = camera.ray(u, v);
+                    ray_color_as_output(&r, &w)
+                })
+                .collect();
+            image_ndarray.push(scanline);
+        }
+
+        let file_path = output_path
+            .join(format!("image_{}", index))
+            .with_extension("json");
+
+        let image_json = serde_json::to_string(&image_ndarray).expect("Well-formed.");
+
+        let mut file = File::create(file_path).expect("Can open file.");
+
+        file.write_all(image_json.as_bytes())
+            .expect("Can write to file.");
+
+        eprintln!(" - Done!");
     }
-
-    let image_json = serde_json::to_string(&image_ndarray).expect("Well-formed.");
-
-    println!("{}", image_json);
-
-    eprintln!("\nDone!");
 }
