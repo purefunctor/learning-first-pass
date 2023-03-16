@@ -479,12 +479,8 @@ fn main() {
             .join(format!("image_{}", index))
             .with_extension("json");
 
-        let image_json = serde_json::to_string(&image_ndarray).expect("Well-formed.");
-
-        let mut file = File::create(file_path).expect("Can open file.");
-
-        file.write_all(image_json.as_bytes())
-            .expect("Can write to file.");
+        let file = File::create(file_path).expect("Can open file.");
+        serde_json::to_writer(file, &image_ndarray).expect("Can write file.");
 
         eprintln!(" - Done!");
     }
