@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use rand::Rng;
 
 use crate::{
@@ -6,8 +8,10 @@ use crate::{
     vec3::{Color, Vec3},
 };
 
-pub trait Scatter {
+pub trait Scatter: Send + Sync {
     fn scatter(&self, r_in: &Ray, hit: &Hit) -> Option<(Color, Ray)>;
+
+    fn as_any(&self) -> &dyn Any;
 }
 
 pub struct Lambertian {
@@ -29,11 +33,15 @@ impl Scatter for Lambertian {
         let scattered = Ray::new(hit.point, scatter_direction);
         Some((self.albedo, scattered))
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 pub struct Metal {
     albedo: Color,
-    fuzz: f64,
+    pub fuzz: f64,
 }
 
 impl Metal {
@@ -56,10 +64,14 @@ impl Scatter for Metal {
             None
         }
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 pub struct Dielectric {
-    index_of_refraction: f64,
+    pub index_of_refraction: f64,
 }
 
 impl Dielectric {
@@ -100,5 +112,9 @@ impl Scatter for Dielectric {
         let scattered = Ray::new(hit.point, direction);
 
         Some((Color::new(1.0, 1.0, 1.0), scattered))
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
