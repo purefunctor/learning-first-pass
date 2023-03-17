@@ -127,174 +127,243 @@ fn ray_color_no_scatter(r: &Ray, w: &World) -> Color {
     }
 }
 
-fn ray_color_as_output(r: &Ray, w: &World) -> [f64; 24] {
+fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 24]) {
     let r_anti_aliasing: f64 = rand::random();
     let r_depth_of_field: f64 = rand::random();
 
     if let Some(hit) = w.hit(r, 0.001, f64::INFINITY) {
         if let Some((attenuation, _)) = hit.material.scatter(r, &hit) {
             if let Some(_) = hit.material.as_any().downcast_ref::<Lambertian>() {
-                return [
-                    // is_lambertian
-                    1.0,
-                    // is_metal
-                    0.0,
-                    // is_dielectric
-                    0.0,
-                    // is_nothing
-                    0.0,
-                    // is_sky
-                    0.0,
-                    // lr
-                    attenuation.x(),
-                    // lg
-                    attenuation.y(),
-                    // lb
-                    attenuation.z(),
-                    // mr
-                    0.0,
-                    // mg
-                    0.0,
-                    // mb
-                    0.0,
-                    // mf
-                    0.0,
-                    // dr
-                    0.0,
-                    // dg
-                    0.0,
-                    // db
-                    0.0,
-                    // di
-                    0.0,
-                    // nr
-                    0.0,
-                    // ng
-                    0.0,
-                    // nb
-                    0.0,
-                    // sr
-                    0.0,
-                    // sg
-                    0.0,
-                    // sb
-                    0.0,
-                    // r_anti_aliasing
-                    r_anti_aliasing,
-                    // r_depth_of_field
-                    r_depth_of_field,
-                ];
+                return (
+                    attenuation,
+                    [
+                        // is_lambertian
+                        1.0,
+                        // is_metal
+                        0.0,
+                        // is_dielectric
+                        0.0,
+                        // is_nothing
+                        0.0,
+                        // is_sky
+                        0.0,
+                        // lr
+                        attenuation.x(),
+                        // lg
+                        attenuation.y(),
+                        // lb
+                        attenuation.z(),
+                        // mr
+                        0.0,
+                        // mg
+                        0.0,
+                        // mb
+                        0.0,
+                        // mf
+                        0.0,
+                        // dr
+                        0.0,
+                        // dg
+                        0.0,
+                        // db
+                        0.0,
+                        // di
+                        0.0,
+                        // nr
+                        0.0,
+                        // ng
+                        0.0,
+                        // nb
+                        0.0,
+                        // sr
+                        0.0,
+                        // sg
+                        0.0,
+                        // sb
+                        0.0,
+                        // r_anti_aliasing
+                        r_anti_aliasing,
+                        // r_depth_of_field
+                        r_depth_of_field,
+                    ],
+                );
             }
 
             if let Some(material) = hit.material.as_any().downcast_ref::<Metal>() {
-                return [
-                    // is_lambertian
-                    0.0,
-                    // is_metal
-                    1.0,
-                    // is_dielectric
-                    0.0,
-                    // is_nothing
-                    0.0,
-                    // is_sky
-                    0.0,
-                    // lr
-                    0.0,
-                    // lg
-                    0.0,
-                    // lb
-                    0.0,
-                    // mr
-                    attenuation.x(),
-                    // mg
-                    attenuation.y(),
-                    // mb
-                    attenuation.z(),
-                    // mf
-                    material.fuzz,
-                    // dr
-                    0.0,
-                    // dg
-                    0.0,
-                    // db
-                    0.0,
-                    // di
-                    0.0,
-                    // nr
-                    0.0,
-                    // ng
-                    0.0,
-                    // nb
-                    0.0,
-                    // sr
-                    0.0,
-                    // sg
-                    0.0,
-                    // sb
-                    0.0,
-                    // r_anti_aliasing
-                    r_anti_aliasing,
-                    // r_depth_of_field
-                    r_depth_of_field,
-                ];
+                return (
+                    attenuation,
+                    [
+                        // is_lambertian
+                        0.0,
+                        // is_metal
+                        1.0,
+                        // is_dielectric
+                        0.0,
+                        // is_nothing
+                        0.0,
+                        // is_sky
+                        0.0,
+                        // lr
+                        0.0,
+                        // lg
+                        0.0,
+                        // lb
+                        0.0,
+                        // mr
+                        attenuation.x(),
+                        // mg
+                        attenuation.y(),
+                        // mb
+                        attenuation.z(),
+                        // mf
+                        material.fuzz,
+                        // dr
+                        0.0,
+                        // dg
+                        0.0,
+                        // db
+                        0.0,
+                        // di
+                        0.0,
+                        // nr
+                        0.0,
+                        // ng
+                        0.0,
+                        // nb
+                        0.0,
+                        // sr
+                        0.0,
+                        // sg
+                        0.0,
+                        // sb
+                        0.0,
+                        // r_anti_aliasing
+                        r_anti_aliasing,
+                        // r_depth_of_field
+                        r_depth_of_field,
+                    ],
+                );
             }
 
             if let Some(material) = hit.material.as_any().downcast_ref::<Dielectric>() {
-                return [
-                    // is_lambertian
-                    0.0,
-                    // is_metal
-                    0.0,
-                    // is_dielectric
-                    1.0,
-                    // is_nothing
-                    0.0,
-                    // is_sky
-                    0.0,
-                    // lr
-                    0.0,
-                    // lg
-                    0.0,
-                    // lb
-                    0.0,
-                    // mr
-                    0.0,
-                    // mg
-                    0.0,
-                    // mb
-                    0.0,
-                    // mf
-                    0.0,
-                    // dr
-                    attenuation.x(),
-                    // dg
-                    attenuation.y(),
-                    // db
-                    attenuation.z(),
-                    // di
-                    material.index_of_refraction,
-                    // nr
-                    0.0,
-                    // ng
-                    0.0,
-                    // nb
-                    0.0,
-                    // sr
-                    0.0,
-                    // sg
-                    0.0,
-                    // sb
-                    0.0,
-                    // r_anti_aliasing
-                    r_anti_aliasing,
-                    // r_depth_of_field
-                    r_depth_of_field,
-                ];
+                return (
+                    attenuation,
+                    [
+                        // is_lambertian
+                        0.0,
+                        // is_metal
+                        0.0,
+                        // is_dielectric
+                        1.0,
+                        // is_nothing
+                        0.0,
+                        // is_sky
+                        0.0,
+                        // lr
+                        0.0,
+                        // lg
+                        0.0,
+                        // lb
+                        0.0,
+                        // mr
+                        0.0,
+                        // mg
+                        0.0,
+                        // mb
+                        0.0,
+                        // mf
+                        0.0,
+                        // dr
+                        attenuation.x(),
+                        // dg
+                        attenuation.y(),
+                        // db
+                        attenuation.z(),
+                        // di
+                        material.index_of_refraction,
+                        // nr
+                        0.0,
+                        // ng
+                        0.0,
+                        // nb
+                        0.0,
+                        // sr
+                        0.0,
+                        // sg
+                        0.0,
+                        // sb
+                        0.0,
+                        // r_anti_aliasing
+                        r_anti_aliasing,
+                        // r_depth_of_field
+                        r_depth_of_field,
+                    ],
+                );
             }
 
             unreachable!()
         } else {
-            return [
+            return (
+                Color::new(0.0, 0.0, 0.0),
+                [
+                    // is_lambertian
+                    0.0,
+                    // is_metal
+                    0.0,
+                    // is_dielectric
+                    0.0,
+                    // is_nothing
+                    1.0,
+                    // is_sky
+                    0.0,
+                    // lr
+                    0.0,
+                    // lg
+                    0.0,
+                    // lb
+                    0.0,
+                    // mr
+                    0.0,
+                    // mg
+                    0.0,
+                    // mb
+                    0.0,
+                    // mf
+                    0.0,
+                    // dr
+                    0.0,
+                    // dg
+                    0.0,
+                    // db
+                    0.0,
+                    // di
+                    0.0,
+                    // nr
+                    0.0,
+                    // ng
+                    0.0,
+                    // nb
+                    0.0,
+                    // sr
+                    0.0,
+                    // sg
+                    0.0,
+                    // sb
+                    0.0,
+                    // r_anti_aliasing
+                    r_anti_aliasing,
+                    // r_depth_of_field
+                    r_depth_of_field,
+                ],
+            );
+        }
+    } else {
+        let unit_direction = r.direction.normalized();
+        let t = 0.5 * (unit_direction.y() + 1.0);
+        let color = (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
+        return (
+            color,
+            [
                 // is_lambertian
                 0.0,
                 // is_metal
@@ -302,9 +371,9 @@ fn ray_color_as_output(r: &Ray, w: &World) -> [f64; 24] {
                 // is_dielectric
                 0.0,
                 // is_nothing
-                1.0,
-                // is_sky
                 0.0,
+                // is_sky
+                1.0,
                 // lr
                 0.0,
                 // lg
@@ -334,71 +403,17 @@ fn ray_color_as_output(r: &Ray, w: &World) -> [f64; 24] {
                 // nb
                 0.0,
                 // sr
-                0.0,
+                color.x(),
                 // sg
-                0.0,
+                color.y(),
                 // sb
-                0.0,
+                color.z(),
                 // r_anti_aliasing
                 r_anti_aliasing,
                 // r_depth_of_field
                 r_depth_of_field,
-            ];
-        }
-    } else {
-        let unit_direction = r.direction.normalized();
-        let t = 0.5 * (unit_direction.y() + 1.0);
-        let color = (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
-        return [
-            // is_lambertian
-            0.0,
-            // is_metal
-            0.0,
-            // is_dielectric
-            0.0,
-            // is_nothing
-            0.0,
-            // is_sky
-            1.0,
-            // lr
-            0.0,
-            // lg
-            0.0,
-            // lb
-            0.0,
-            // mr
-            0.0,
-            // mg
-            0.0,
-            // mb
-            0.0,
-            // mf
-            0.0,
-            // dr
-            0.0,
-            // dg
-            0.0,
-            // db
-            0.0,
-            // di
-            0.0,
-            // nr
-            0.0,
-            // ng
-            0.0,
-            // nb
-            0.0,
-            // sr
-            color.x(),
-            // sg
-            color.y(),
-            // sb
-            color.z(),
-            // r_anti_aliasing
-            r_anti_aliasing,
-            // r_depth_of_field
-            r_depth_of_field,
-        ];
+            ],
+        );
     }
 }
 
@@ -449,7 +464,7 @@ fn main() {
             should_blur,
         );
 
-        let mut image_ndarray = vec![];
+        let mut scanlines = vec![];
         for j in (0..IMAGE_HEIGHT).rev() {
             eprint!(
                 "\r{} - Scanlines remaining {:?}",
@@ -466,21 +481,39 @@ fn main() {
                     let random_v: f64 = rng.gen();
 
                     let u = (i as f64 + random_u) / (IMAGE_WIDTH - 1) as f64;
-                    let v = (i as f64 + random_v) / (IMAGE_HEIGHT - 1) as f64;
+                    let v = (j as f64 + random_v) / (IMAGE_HEIGHT - 1) as f64;
 
                     let r = camera.ray(u, v);
                     ray_color_as_output(&r, &w)
                 })
                 .collect();
-            image_ndarray.push(scanline);
+            scanlines.push(scanline);
         }
 
-        let file_path = output_path
-            .join(format!("image_{}", index))
-            .with_extension("json");
+        let base_file_path = output_path.join(format!("image_{}", index));
+        let json_file_path = base_file_path.with_extension("json");
+        let ppm_file_path = base_file_path.with_extension("ppm");
 
-        let file = BufWriter::new(File::create(file_path).expect("Can open file."));
-        serde_json::to_writer(file, &image_ndarray).expect("Can write file.");
+        let mut ppm_file = BufWriter::new(File::create(ppm_file_path).unwrap());
+        writeln!(ppm_file, "P3").unwrap();
+        writeln!(ppm_file, "{} {}", IMAGE_WIDTH, IMAGE_HEIGHT).unwrap();
+        writeln!(ppm_file, "255").unwrap();
+        for i in 0..IMAGE_HEIGHT {
+            for j in 0..IMAGE_WIDTH {
+                writeln!(ppm_file, "{}", scanlines[i][j].0.format_color(1)).unwrap();
+            }
+        }
+
+        let json_file = BufWriter::new(File::create(json_file_path).unwrap());
+        let mut image_ndarray = vec![vec![vec![0.0; 256]; 256]; 24];
+        for i in 0..IMAGE_HEIGHT {
+            for j in 0..IMAGE_WIDTH {
+                for k in 0..24 {
+                    image_ndarray[k][i][j] = scanlines[i][j].1[k]
+                }
+            }
+        }
+        serde_json::to_writer(json_file, &image_ndarray).unwrap();
 
         eprintln!(" - Done!");
     }
