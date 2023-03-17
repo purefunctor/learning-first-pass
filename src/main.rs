@@ -424,12 +424,14 @@ struct Args {
     batch_start: usize,
     #[arg(help = "Generate a batch until this index", default_value = "100")]
     batch_end: usize,
+    #[arg(long, help = "The output path.")]
+    output_path: String,
 }
 
 fn main() {
     let cli = Args::parse();
 
-    let output_path = Path::new("output");
+    let output_path = Path::new(&cli.output_path);
     if !output_path.exists() {
         fs::create_dir(output_path).unwrap();
     }
