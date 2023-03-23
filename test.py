@@ -19,6 +19,8 @@ X, y = X.to(device), y.to(device)
 
 y_hat = raycaster(X)
 
-y_image = ToPILImage()(y_hat[0])
+y_image = ToPILImage()(y[0])
+y_hat_image = ToPILImage()(y_hat[0])
 
 y_image.show()
+y_hat_image.show()

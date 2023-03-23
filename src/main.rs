@@ -69,17 +69,17 @@ fn random_scene() -> World {
         }
     }
 
-    // let mat1 = Arc::new(Dielectric::new(1.5));
-    // let mat2 = Arc::new(Lambertian::new(Color::new(0.4, 0.2, 0.1)));
-    // let mat3 = Arc::new(Metal::new(Color::new(0.7, 0.6, 0.5), 0.0));
+    let mat1 = Arc::new(Dielectric::new(1.5));
+    let mat2 = Arc::new(Lambertian::new(Color::new(0.4, 0.2, 0.1)));
+    let mat3 = Arc::new(Metal::new(Color::new(0.7, 0.6, 0.5), 0.0));
 
-    // let sphere1 = Sphere::new(Point3::new(0.0, 1.0, 0.0), 1.0, mat1);
-    // let sphere2 = Sphere::new(Point3::new(-4.0, 1.0, 0.0), 1.0, mat2);
-    // let sphere3 = Sphere::new(Point3::new(4.0, 1.0, 0.0), 1.0, mat3);
+    let sphere1 = Sphere::new(Point3::new(0.0, 1.0, 0.0), 1.0, mat1);
+    let sphere2 = Sphere::new(Point3::new(-4.0, 1.0, 0.0), 1.0, mat2);
+    let sphere3 = Sphere::new(Point3::new(4.0, 1.0, 0.0), 1.0, mat3);
 
-    // world.push(Box::new(sphere1));
-    // world.push(Box::new(sphere2));
-    // world.push(Box::new(sphere3));
+    world.push(Box::new(sphere1));
+    world.push(Box::new(sphere2));
+    world.push(Box::new(sphere3));
 
     world
 }
@@ -118,7 +118,7 @@ fn ray_color_no_scatter(r: &Ray, w: &World) -> Color {
     }
 }
 
-fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 22]) {
+fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 9]) {
     if let Some(hit) = w.hit(r, 0.001, f64::INFINITY) {
         if let Some((attenuation, _)) = hit.material.scatter(r, &hit) {
             if let Some(_) = hit.material.as_any().downcast_ref::<Lambertian>() {
@@ -143,32 +143,6 @@ fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 22]) {
                         attenuation.z(),
                         // mr
                         0.0,
-                        // mg
-                        0.0,
-                        // mb
-                        0.0,
-                        // mf
-                        0.0,
-                        // dr
-                        0.0,
-                        // dg
-                        0.0,
-                        // db
-                        0.0,
-                        // di
-                        0.0,
-                        // nr
-                        0.0,
-                        // ng
-                        0.0,
-                        // nb
-                        0.0,
-                        // sr
-                        0.0,
-                        // sg
-                        0.0,
-                        // sb
-                        0.0,
                     ],
                 );
             }
@@ -187,12 +161,6 @@ fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 22]) {
                         0.0,
                         // is_sky
                         0.0,
-                        // lr
-                        0.0,
-                        // lg
-                        0.0,
-                        // lb
-                        0.0,
                         // mr
                         attenuation.x(),
                         // mg
@@ -201,26 +169,6 @@ fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 22]) {
                         attenuation.z(),
                         // mf
                         material.fuzz,
-                        // dr
-                        0.0,
-                        // dg
-                        0.0,
-                        // db
-                        0.0,
-                        // di
-                        0.0,
-                        // nr
-                        0.0,
-                        // ng
-                        0.0,
-                        // nb
-                        0.0,
-                        // sr
-                        0.0,
-                        // sg
-                        0.0,
-                        // sb
-                        0.0,
                     ],
                 );
             }
@@ -239,20 +187,6 @@ fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 22]) {
                         0.0,
                         // is_sky
                         0.0,
-                        // lr
-                        0.0,
-                        // lg
-                        0.0,
-                        // lb
-                        0.0,
-                        // mr
-                        0.0,
-                        // mg
-                        0.0,
-                        // mb
-                        0.0,
-                        // mf
-                        0.0,
                         // dr
                         attenuation.x(),
                         // dg
@@ -261,18 +195,6 @@ fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 22]) {
                         attenuation.z(),
                         // di
                         material.index_of_refraction,
-                        // nr
-                        0.0,
-                        // ng
-                        0.0,
-                        // nb
-                        0.0,
-                        // sr
-                        0.0,
-                        // sg
-                        0.0,
-                        // sb
-                        0.0,
                     ],
                 );
             }
@@ -300,32 +222,6 @@ fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 22]) {
                     0.0,
                     // mr
                     0.0,
-                    // mg
-                    0.0,
-                    // mb
-                    0.0,
-                    // mf
-                    0.0,
-                    // dr
-                    0.0,
-                    // dg
-                    0.0,
-                    // db
-                    0.0,
-                    // di
-                    0.0,
-                    // nr
-                    0.0,
-                    // ng
-                    0.0,
-                    // nb
-                    0.0,
-                    // sr
-                    0.0,
-                    // sg
-                    0.0,
-                    // sb
-                    0.0,
                 ],
             );
         }
@@ -346,40 +242,14 @@ fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 22]) {
                 0.0,
                 // is_sky
                 1.0,
-                // lr
-                0.0,
-                // lg
-                0.0,
-                // lb
-                0.0,
-                // mr
-                0.0,
-                // mg
-                0.0,
-                // mb
-                0.0,
-                // mf
-                0.0,
-                // dr
-                0.0,
-                // dg
-                0.0,
-                // db
-                0.0,
-                // di
-                0.0,
-                // nr
-                0.0,
-                // ng
-                0.0,
-                // nb
-                0.0,
                 // sr
                 color.x(),
                 // sg
                 color.y(),
                 // sb
                 color.z(),
+                // i
+                0.0,
             ],
         );
     }
@@ -485,11 +355,12 @@ fn main() {
             }
         }
 
+        const CHANNEL_SIZE: usize = 9;
         let json_file = BufWriter::new(File::create(json_file_path).unwrap());
-        let mut image_ndarray = vec![vec![vec![0.0; IMAGE_HEIGHT]; IMAGE_WIDTH]; 22];
+        let mut image_ndarray = vec![vec![vec![0.0; IMAGE_HEIGHT]; IMAGE_WIDTH]; CHANNEL_SIZE];
         for i in 0..IMAGE_HEIGHT {
             for j in 0..IMAGE_WIDTH {
-                for k in 0..22 {
+                for k in 0..CHANNEL_SIZE {
                     image_ndarray[k][i][j] = scanlines[i][j].1[k]
                 }
             }

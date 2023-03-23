@@ -38,7 +38,7 @@ class Raycaster(nn.Module):
     def __init__(self):
         super().__init__()
         self.sequence = nn.Sequential(
-            nn.Conv2d(in_channels=22, out_channels=128, kernel_size=3, padding="same"),
+            nn.Conv2d(in_channels=9, out_channels=128, kernel_size=3, padding="same"),
             nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, padding="same"),
