@@ -1,14 +1,3 @@
-/*r
-3. Materials (diffuse, metal, dielectric)
-
-4. Objects (sphere)
-
-5. World (vec of objects)
-
-6. Hittable stuff
-
- */
-
 use std::{
     fs::{self, File},
     io::{stderr, BufWriter, Write},
@@ -39,14 +28,16 @@ fn random_scene() -> World {
     let mut rng = rand::thread_rng();
     let mut world = World::new();
 
-    let ground_mat = Arc::new(Lambertian::new(Color::new(0.5, 0.5, 0.5)));
-    let ground_sphere = Sphere::new(Point3::new(0.0, -1000.0, 0.0), 1000.0, ground_mat);
+    // let ground_mat = Arc::new(Lambertian::new(Color::new(0.5, 0.5, 0.5)));
+    // let ground_sphere = Sphere::new(Point3::new(0.0, -1000.0, 0.0), 1000.0, ground_mat);
 
-    world.push(Box::new(ground_sphere));
+    // world.push(Box::new(ground_sphere));
 
     for a in -11..=11 {
         for b in -11..=11 {
             let choose_mat: f64 = rng.gen();
+            let sphere_size: f64 = rng.gen_range(0.0..0.5);
+
             let center = Point3::new(
                 (a as f64) + rng.gen_range(0.0..0.9),
                 0.2,
@@ -57,7 +48,7 @@ fn random_scene() -> World {
                 // Diffuse
                 let albedo = Color::random(0.0..1.0) * Color::random(0.0..1.0);
                 let sphere_mat = Arc::new(Lambertian::new(albedo));
-                let sphere = Sphere::new(center, 0.2, sphere_mat);
+                let sphere = Sphere::new(center, sphere_size, sphere_mat);
 
                 world.push(Box::new(sphere));
             } else if choose_mat < 0.95 {
@@ -65,30 +56,30 @@ fn random_scene() -> World {
                 let albedo = Color::random(0.4..1.0);
                 let fuzz = rng.gen_range(0.0..0.5);
                 let sphere_mat = Arc::new(Metal::new(albedo, fuzz));
-                let sphere = Sphere::new(center, 0.2, sphere_mat);
+                let sphere = Sphere::new(center, sphere_size, sphere_mat);
 
                 world.push(Box::new(sphere));
             } else {
                 // Glass
                 let sphere_mat = Arc::new(Dielectric::new(1.5));
-                let sphere = Sphere::new(center, 0.2, sphere_mat);
+                let sphere = Sphere::new(center, sphere_size, sphere_mat);
 
                 world.push(Box::new(sphere));
             }
         }
     }
 
-    let mat1 = Arc::new(Dielectric::new(1.5));
-    let mat2 = Arc::new(Lambertian::new(Color::new(0.4, 0.2, 0.1)));
-    let mat3 = Arc::new(Metal::new(Color::new(0.7, 0.6, 0.5), 0.0));
+    // let mat1 = Arc::new(Dielectric::new(1.5));
+    // let mat2 = Arc::new(Lambertian::new(Color::new(0.4, 0.2, 0.1)));
+    // let mat3 = Arc::new(Metal::new(Color::new(0.7, 0.6, 0.5), 0.0));
 
-    let sphere1 = Sphere::new(Point3::new(0.0, 1.0, 0.0), 1.0, mat1);
-    let sphere2 = Sphere::new(Point3::new(-4.0, 1.0, 0.0), 1.0, mat2);
-    let sphere3 = Sphere::new(Point3::new(4.0, 1.0, 0.0), 1.0, mat3);
+    // let sphere1 = Sphere::new(Point3::new(0.0, 1.0, 0.0), 1.0, mat1);
+    // let sphere2 = Sphere::new(Point3::new(-4.0, 1.0, 0.0), 1.0, mat2);
+    // let sphere3 = Sphere::new(Point3::new(4.0, 1.0, 0.0), 1.0, mat3);
 
-    world.push(Box::new(sphere1));
-    world.push(Box::new(sphere2));
-    world.push(Box::new(sphere3));
+    // world.push(Box::new(sphere1));
+    // world.push(Box::new(sphere2));
+    // world.push(Box::new(sphere3));
 
     world
 }
@@ -127,10 +118,7 @@ fn ray_color_no_scatter(r: &Ray, w: &World) -> Color {
     }
 }
 
-fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 24]) {
-    let r_anti_aliasing: f64 = rand::random();
-    let r_depth_of_field: f64 = rand::random();
-
+fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 22]) {
     if let Some(hit) = w.hit(r, 0.001, f64::INFINITY) {
         if let Some((attenuation, _)) = hit.material.scatter(r, &hit) {
             if let Some(_) = hit.material.as_any().downcast_ref::<Lambertian>() {
@@ -181,10 +169,6 @@ fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 24]) {
                         0.0,
                         // sb
                         0.0,
-                        // r_anti_aliasing
-                        r_anti_aliasing,
-                        // r_depth_of_field
-                        r_depth_of_field,
                     ],
                 );
             }
@@ -237,10 +221,6 @@ fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 24]) {
                         0.0,
                         // sb
                         0.0,
-                        // r_anti_aliasing
-                        r_anti_aliasing,
-                        // r_depth_of_field
-                        r_depth_of_field,
                     ],
                 );
             }
@@ -293,10 +273,6 @@ fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 24]) {
                         0.0,
                         // sb
                         0.0,
-                        // r_anti_aliasing
-                        r_anti_aliasing,
-                        // r_depth_of_field
-                        r_depth_of_field,
                     ],
                 );
             }
@@ -350,10 +326,6 @@ fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 24]) {
                     0.0,
                     // sb
                     0.0,
-                    // r_anti_aliasing
-                    r_anti_aliasing,
-                    // r_depth_of_field
-                    r_depth_of_field,
                 ],
             );
         }
@@ -408,10 +380,6 @@ fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 24]) {
                 color.y(),
                 // sb
                 color.z(),
-                // r_anti_aliasing
-                r_anti_aliasing,
-                // r_depth_of_field
-                r_depth_of_field,
             ],
         );
     }
@@ -438,9 +406,9 @@ fn main() {
 
     // Image
     const ASPECT_RATIO: f64 = 1.0 / 1.0;
-    const IMAGE_WIDTH: usize = 256;
+    const IMAGE_WIDTH: usize = 64;
     const IMAGE_HEIGHT: usize = (IMAGE_WIDTH as f64 / ASPECT_RATIO) as usize;
-    // const SAMPLES_PER_PIXEL: usize = 1;
+    const SAMPLES_PER_PIXEL: usize = 10;
     // const MAX_DEPTH: usize = 50;
 
     for index in cli.batch_start..cli.batch_end {
@@ -486,7 +454,18 @@ fn main() {
                     let v = (j as f64 + random_v) / (IMAGE_HEIGHT - 1) as f64;
 
                     let r = camera.ray(u, v);
-                    ray_color_as_output(&r, &w)
+                    let (mut image_color, input_image) = ray_color_as_output(&r, &w);
+                    for _ in 0..SAMPLES_PER_PIXEL - 1 {
+                        let random_u: f64 = rng.gen();
+                        let random_v: f64 = rng.gen();
+
+                        let u = (i as f64 + random_u) / (IMAGE_WIDTH - 1) as f64;
+                        let v = (j as f64 + random_v) / (IMAGE_HEIGHT - 1) as f64;
+
+                        let r = camera.ray(u, v);
+                        image_color += ray_color_no_scatter(&r, &w);
+                    }
+                    (image_color, input_image)
                 })
                 .collect();
             scanlines.push(scanline);
@@ -502,15 +481,15 @@ fn main() {
         writeln!(ppm_file, "255").unwrap();
         for i in 0..IMAGE_HEIGHT {
             for j in 0..IMAGE_WIDTH {
-                writeln!(ppm_file, "{}", scanlines[i][j].0.format_color(1)).unwrap();
+                writeln!(ppm_file, "{}", scanlines[i][j].0.format_color(SAMPLES_PER_PIXEL)).unwrap();
             }
         }
 
         let json_file = BufWriter::new(File::create(json_file_path).unwrap());
-        let mut image_ndarray = vec![vec![vec![0.0; 256]; 256]; 24];
+        let mut image_ndarray = vec![vec![vec![0.0; IMAGE_HEIGHT]; IMAGE_WIDTH]; 22];
         for i in 0..IMAGE_HEIGHT {
             for j in 0..IMAGE_WIDTH {
-                for k in 0..24 {
+                for k in 0..22 {
                     image_ndarray[k][i][j] = scanlines[i][j].1[k]
                 }
             }
