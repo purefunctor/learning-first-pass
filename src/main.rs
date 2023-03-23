@@ -5,17 +5,15 @@ use std::{
     sync::Arc,
 };
 
+use camera::Camera;
 use clap::Parser;
-use rand::Rng;
-
 use hittable::{Hittable, World};
 use material::{Dielectric, Lambertian, Metal};
 use object::Sphere;
+use rand::Rng;
 use ray::Ray;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-use vec3::{Color, Point3};
-
-use crate::{camera::Camera, vec3::Vec3};
+use vec3::{Color, Point3, Vec3};
 
 mod camera;
 mod hittable;
@@ -205,22 +203,14 @@ fn ray_color_as_output(r: &Ray, w: &World) -> (Color, [f64; 9]) {
                 Color::new(0.0, 0.0, 0.0),
                 [
                     // is_lambertian
-                    0.0,
-                    // is_metal
-                    0.0,
-                    // is_dielectric
-                    0.0,
-                    // is_nothing
-                    1.0,
-                    // is_sky
-                    0.0,
-                    // lr
-                    0.0,
-                    // lg
-                    0.0,
-                    // lb
-                    0.0,
-                    // mr
+                    0.0, // is_metal
+                    0.0, // is_dielectric
+                    0.0, // is_nothing
+                    1.0, // is_sky
+                    0.0, // lr
+                    0.0, // lg
+                    0.0, // lb
+                    0.0, // mr
                     0.0,
                 ],
             );
@@ -351,7 +341,12 @@ fn main() {
         writeln!(ppm_file, "255").unwrap();
         for i in 0..IMAGE_HEIGHT {
             for j in 0..IMAGE_WIDTH {
-                writeln!(ppm_file, "{}", scanlines[i][j].0.format_color(SAMPLES_PER_PIXEL)).unwrap();
+                writeln!(
+                    ppm_file,
+                    "{}",
+                    scanlines[i][j].0.format_color(SAMPLES_PER_PIXEL)
+                )
+                .unwrap();
             }
         }
 
