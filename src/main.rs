@@ -1,10 +1,18 @@
-use std::sync::Arc;
+use std::{
+    fmt::{Debug, Display},
+    fs::File,
+    io::BufWriter,
+    ops::{Add, Index},
+    sync::Arc,
+};
 
 use indicatif::{ProgressIterator, ProgressStyle};
 use material::{Dielectric, Lambertian, Metal};
 use ndarray::Array3;
+use num_traits::Zero;
 use object::Sphere;
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 use vec3::{Color, Point3, Vec3};
 
 mod camera;
@@ -85,18 +93,87 @@ fn inside_sphere(point: Vec3, sphere: &Sphere) -> bool {
     distance < radius
 }
 
+#[derive(Clone, Copy)]
+struct Features {
+    features: [f64; 7],
+}
+
+impl Features {
+    fn from_sphere(sphere: &Sphere) -> Features {
+        let mut features = [0.0; 7];
+
+        let any_material = sphere.material.as_any();
+        if let Some(material) = any_material.downcast_ref::<Lambertian>() {
+            features[0] = 1.0;
+            features[3] = material.albedo.x();
+            features[4] = material.albedo.y();
+            features[5] = material.albedo.z();
+        } else if let Some(material) = any_material.downcast_ref::<Metal>() {
+            features[1] = 1.0;
+            features[3] = material.albedo.x();
+            features[4] = material.albedo.y();
+            features[5] = material.albedo.z();
+            features[6] = material.fuzz;
+        } else if let Some(material) = any_material.downcast_ref::<Dielectric>() {
+            features[2] = 1.0;
+            features[6] = material.index_of_refraction;
+        } else {
+            unreachable!("Unhandled material!");
+        };
+
+        Self { features }
+    }
+}
+
+impl Add for Features {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self::Output {
+        let mut accumulator = [0.0; 7];
+        for (index, value) in accumulator.iter_mut().enumerate() {
+            *value = self.features[index] + other.features[index]
+        }
+        Self {
+            features: accumulator,
+        }
+    }
+}
+
+impl Zero for Features {
+    fn zero() -> Self {
+        Self { features: [0.0; 7] }
+    }
+
+    fn is_zero(&self) -> bool {
+        self.features.iter().all(|v| *v == 0.0)
+    }
+}
+
+impl Index<usize> for Features {
+    type Output = f64;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.features[index]
+    }
+}
+
 fn main() {
     let scene = random_scene();
     let (min_bounds, max_bounds) = compute_bounds(&scene);
 
-    let n = 128;
-    let mut scene_matrix: Array3<f64> = Array3::zeros((n, n, n));
+    const C: usize = 7;
 
-    let dx = (max_bounds.x() - min_bounds.x()) / n as f64;
-    let dy = (max_bounds.y() - min_bounds.y()) / n as f64;
-    let dz = (max_bounds.z() - min_bounds.z()) / n as f64;
+    const W: usize = 128;
+    const H: usize = 128;
+    const D: usize = 128;
 
-    for ((i, j, k), v) in scene_matrix
+    let mut scene_ndarray: Array3<Features> = Array3::zeros((D, H, W));
+
+    let dx = (max_bounds.x() - min_bounds.x()) / W as f64;
+    let dy = (max_bounds.y() - min_bounds.y()) / H as f64;
+    let dz = (max_bounds.z() - min_bounds.z()) / D as f64;
+
+    for ((i, j, k), v) in scene_ndarray
         .indexed_iter_mut()
         .progress_with_style(ProgressStyle::default_bar())
     {
@@ -107,11 +184,21 @@ fn main() {
         );
         for sphere in scene.iter() {
             if inside_sphere(point, sphere) {
-                *v = 1.0;
+                *v = Features::from_sphere(sphere);
                 continue;
             }
         }
     }
 
-    println!("{:?}", scene_matrix.shape());
+    let mut scene_matrix = vec![vec![vec![vec![0.0; W]; H]; D]; C];
+
+    for c in 0..C {
+        for d in 0..D {
+            for h in 0..H {
+                for w in 0..W {
+                    scene_matrix[c][d][h][w] = scene_ndarray[(d, h, w)][c];
+                }
+            }
+        }
+    }
 }

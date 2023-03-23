@@ -15,7 +15,7 @@ pub trait Scatter: Send + Sync {
 }
 
 pub struct Lambertian {
-    albedo: Color,
+    pub albedo: Color,
 }
 
 impl Lambertian {
@@ -40,7 +40,7 @@ impl Scatter for Lambertian {
 }
 
 pub struct Metal {
-    albedo: Color,
+    pub albedo: Color,
     pub fuzz: f64,
 }
 
