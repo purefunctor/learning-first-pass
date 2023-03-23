@@ -8,9 +8,9 @@ use crate::{
 };
 
 pub struct Sphere {
-    radius: f64,
-    center: Point3,
-    material: Arc<dyn Scatter>,
+    pub radius: f64,
+    pub center: Point3,
+    pub material: Arc<dyn Scatter>,
 }
 
 impl Sphere {
