@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-SIZE=64
+SIZE=16
 
 cargo build --release 2> /dev/null
 

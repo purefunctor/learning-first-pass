@@ -4,7 +4,6 @@ from pathlib import Path
 import re
 import torch
 
-from PIL import Image
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from torchvision.transforms import ToTensor
@@ -43,7 +42,7 @@ class Images(Dataset):
         with render_json.open("r") as f_r, volume_json.open("r") as f_v:
             return (
                 torch.tensor(json.load(f_v), dtype=torch.float),
-                torch.tensor(json.load(f_r), dtype=torch.uint8),
+                torch.tensor(json.load(f_r), dtype=torch.float),
             )
 
     def __len__(self):
@@ -61,26 +60,49 @@ class Model(nn.Module):
         self.maxpool_0 = nn.MaxPool3d(
             kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1)
         )
+        self.relu_0 = nn.ReLU()
 
         self.conv3d_1 = nn.Conv3d(
             in_channels=128, out_channels=64, kernel_size=5, padding="same"
         )
         self.batchNorm3d_1 = nn.BatchNorm3d(64)
         self.maxpool_1 = nn.MaxPool3d(
-            kernel_size=(2, 1, 1), stride=(2, 1, 1)
+            kernel_size=(16, 1, 1), stride=(1, 1, 1)
         )
+        self.relu_1 = nn.ReLU()
+
+        self.conv2d_2 = nn.Conv2d(in_channels=64, out_channels=32, kernel_size=3, padding="same")
+        self.batchNorm2d_2 = nn.BatchNorm2d(32)
+        self.relu_2 = nn.ReLU()
+
+        self.conv2d_3 = nn.Conv2d(in_channels=32, out_channels=3, kernel_size=3, padding="same")
+        self.batchNorm2d_3 = nn.BatchNorm2d(3)
+        self.relu_3 = nn.ReLU()
+
+        self.sigmoid_4 = nn.Sigmoid()
 
     def forward(self, x):
         x = self.conv3d_0(x)
         x = self.batchNorm3d_0(x)
         x = self.maxpool_0(x)
+        x = self.relu_0(x)
 
         x = self.conv3d_1(x)
         x = self.batchNorm3d_1(x)
         x = self.maxpool_1(x)
+        x = self.relu_1(x)
 
-        # Return the output tensor
-        return x
+        x = torch.sum(x, dim=2)
+
+        x = self.conv2d_2(x)
+        x = self.batchNorm2d_2(x)
+        x = self.relu_2(x)
+
+        x = self.conv2d_3(x)
+        x = self.batchNorm2d_3(x)
+        x = self.relu_3(x)
+
+        return self.sigmoid_4(x)
 
 
 device = "cpu"
@@ -121,8 +143,8 @@ if __name__ == "__main__":
     training_data = Images(image_directory="output-train")
     test_data = Images(image_directory="output-test")
 
-    training_dataloader = DataLoader(training_data, batch_size=2)
-    test_dataloader = DataLoader(test_data, batch_size=2)
+    training_dataloader = DataLoader(training_data, batch_size=32)
+    test_dataloader = DataLoader(test_data, batch_size=32)
 
     raycaster = Model().to(device)
     loss_fn = nn.MSELoss()

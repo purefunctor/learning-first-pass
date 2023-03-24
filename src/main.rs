@@ -106,14 +106,18 @@ fn generate_volume(n: usize, scene: &[Sphere]) -> Vec<Vec<Vec<Vec<f64>>>> {
 
     let mut scene_ndarray: Array3<Features> = Array3::zeros((w, h, d));
 
-    let x_d = max_bounds.x() - min_bounds.x();
-    let y_d = max_bounds.y() - min_bounds.y();
-    let z_d = max_bounds.z() - min_bounds.z();
-    let d_m = x_d.max(y_d).max(z_d);
+    // let x_d = max_bounds.x() - min_bounds.x();
+    // let y_d = max_bounds.y() - min_bounds.y();
+    // let z_d = max_bounds.z() - min_bounds.z();
+    // let d_m = x_d.max(y_d).max(z_d);
 
-    let dx = (x_d + d_m - x_d) / w as f64;
-    let dy = (y_d + d_m - y_d) / h as f64;
-    let dz = (z_d + d_m - z_d) / d as f64;
+    // let dx = (x_d + d_m - x_d) / w as f64;
+    // let dy = (y_d + d_m - y_d) / h as f64;
+    // let dz = (z_d + d_m - z_d) / d as f64;
+
+    let dx = (max_bounds.x() - min_bounds.x()) / w as f64;
+    let dy = (max_bounds.x() - min_bounds.x()) / h as f64;
+    let dz = (max_bounds.x() - min_bounds.x()) / d as f64;
 
     for ((i, j, k), v) in scene_ndarray.indexed_iter_mut() {
         let point = Vec3::new(
