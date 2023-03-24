@@ -30,10 +30,10 @@ fn random_scene() -> Vec<Sphere> {
     let mut rng = rand::thread_rng();
     let mut scene = Vec::new();
 
-    for a in -11..=11 {
-        for b in -11..=11 {
+    for a in -1..=1 {
+        for b in -1..=1 {
             let choose_mat: f64 = rng.gen();
-            let sphere_size: f64 = rng.gen_range(0.0..0.5);
+            let sphere_size: f64 = rng.gen_range(0.49..0.5);
 
             let center = Point3::new(
                 (a as f64) + rng.gen_range(0.0..0.9),
@@ -116,8 +116,8 @@ fn generate_volume(n: usize, scene: &[Sphere]) -> Vec<Vec<Vec<Vec<f64>>>> {
     // let dz = (z_d + d_m - z_d) / d as f64;
 
     let dx = (max_bounds.x() - min_bounds.x()) / w as f64;
-    let dy = (max_bounds.x() - min_bounds.x()) / h as f64;
-    let dz = (max_bounds.x() - min_bounds.x()) / d as f64;
+    let dy = (max_bounds.y() - min_bounds.y()) / h as f64;
+    let dz = (max_bounds.z() - min_bounds.z()) / d as f64;
 
     for ((i, j, k), v) in scene_ndarray.indexed_iter_mut() {
         let point = Vec3::new(

@@ -143,8 +143,8 @@ if __name__ == "__main__":
     training_data = Images(image_directory="output-train")
     test_data = Images(image_directory="output-test")
 
-    training_dataloader = DataLoader(training_data, batch_size=32)
-    test_dataloader = DataLoader(test_data, batch_size=32)
+    training_dataloader = DataLoader(training_data, batch_size=2)
+    test_dataloader = DataLoader(test_data, batch_size=2)
 
     raycaster = Model().to(device)
     loss_fn = nn.MSELoss()
