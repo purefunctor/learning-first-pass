@@ -1,15 +1,19 @@
 #!/usr/bin/env sh
 
-# generate test data
-cargo run -q --release -- --output-path output-test 0 3000
+SIZE=64
 
-pushd output-test
-convert *.ppm image_%d.png
-popd
+cargo build --release 2> /dev/null
+
+# generate test data
+./target/release/learning-first-pass --output output-test --size $SIZE 3000
+
+# pushd output-test
+# convert *.ppm image_%d.png
+# popd
 
 # generate training data
-cargo run -q --release -- --output-path output-train 0 12000
+./target/release/learning-first-pass --output output-train --size $SIZE 12000
 
-pushd output-train
-convert *.ppm image_%d.png
-popd
+# pushd output-train
+# convert *.ppm image_%d.png
+# popd
