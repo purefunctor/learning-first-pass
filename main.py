@@ -66,16 +66,18 @@ class Model(nn.Module):
             in_channels=128, out_channels=64, kernel_size=5, padding="same"
         )
         self.batchNorm3d_1 = nn.BatchNorm3d(64)
-        self.maxpool_1 = nn.MaxPool3d(
-            kernel_size=(16, 1, 1), stride=(1, 1, 1)
-        )
+        self.maxpool_1 = nn.MaxPool3d(kernel_size=(16, 1, 1), stride=(1, 1, 1))
         self.relu_1 = nn.ReLU()
 
-        self.conv2d_2 = nn.Conv2d(in_channels=64, out_channels=32, kernel_size=3, padding="same")
+        self.conv2d_2 = nn.Conv2d(
+            in_channels=64, out_channels=32, kernel_size=3, padding="same"
+        )
         self.batchNorm2d_2 = nn.BatchNorm2d(32)
         self.relu_2 = nn.ReLU()
 
-        self.conv2d_3 = nn.Conv2d(in_channels=32, out_channels=3, kernel_size=3, padding="same")
+        self.conv2d_3 = nn.Conv2d(
+            in_channels=32, out_channels=3, kernel_size=3, padding="same"
+        )
         self.batchNorm2d_3 = nn.BatchNorm2d(3)
         self.relu_3 = nn.ReLU()
 

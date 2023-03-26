@@ -1,13 +1,13 @@
 use crate::{
-    material::Material,
     ray::Ray,
     vec3::{Point3, Vec3},
+    world::Object,
 };
 
 pub struct Hit {
     pub point: Point3,
     pub normal: Vec3,
-    pub material: Material,
+    pub object: Object,
     pub t: f64,
     pub front_face: bool,
 }

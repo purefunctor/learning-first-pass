@@ -1,22 +1,23 @@
-use std::ops::{Add, Index};
-
 use camera::Camera;
 use material::Material;
-use ndarray::{ArrayD, IxDyn};
-use num_traits::Zero;
-use numpy::{PyArrayDyn, ToPyArray};
-use pyo3::{pymodule, types::PyModule, PyResult, Python};
+use ndarray::Array3;
+use numpy::ToPyArray;
+use pyo3::{
+    pymodule,
+    types::{PyModule, PyTuple},
+    PyResult, Python, ToPyObject,
+};
 use rand::Rng;
 use ray::Ray;
 use vec3::{Color, Point3, Vec3};
 use world::{Object, ObjectKind, World};
 
 mod camera;
+mod hit;
 mod material;
 mod ray;
 mod vec3;
 mod world;
-mod hit;
 
 pub fn random_scene() -> World {
     let mut rng = rand::thread_rng();
@@ -62,21 +63,99 @@ pub fn random_scene() -> World {
     World(scene)
 }
 
-pub fn ray_color(r: &Ray, w: &World) -> Color {
-    if let Some(hit) = w.hit(r, 0.001, f64::INFINITY) {
-        if let Some((attenuation, _)) = hit.material.scatter(r, &hit) {
-            attenuation
+pub fn ray_info(ray: &Ray, world: &World) -> (Info, Color) {
+    if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
+        if let Some((attenuation, _)) = hit.object.material.scatter(ray, &hit) {
+            (Info::from_object(hit.object), attenuation)
         } else {
-            Color::new(0.0, 0.0, 0.0)
+            (Info::from_nothing(), Color::new(0.0, 0.0, 0.0))
         }
     } else {
-        let unit_direction = r.direction.normalized();
+        let unit_direction = ray.direction.normalized();
         let t = 0.5 * (unit_direction.y() + 1.0);
-        (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0)
+        let color = (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
+        (Info::from_sky(), color)
     }
 }
 
-pub fn generate_render(n: usize, world: World) -> ArrayD<usize> {
+const CHANNELS: usize = 17;
+
+#[derive(Default)]
+pub struct Info {
+    is_lambertian: f64,
+    is_metal: f64,
+    is_dielectric: f64,
+    is_nothing: f64,
+    is_sky: f64,
+    lr: f64,
+    lg: f64,
+    lb: f64,
+    mr: f64,
+    mg: f64,
+    mb: f64,
+    mf: f64,
+    di: f64,
+    sphere_x: f64,
+    sphere_y: f64,
+    sphere_z: f64,
+    sphere_r: f64,
+}
+
+impl Info {
+    fn from_nothing() -> Self {
+        let mut info = Self::default();
+        info.is_nothing = 1.0;
+        info
+    }
+
+    fn from_sky() -> Self {
+        let mut info = Self::default();
+        info.is_sky = 1.0;
+        info
+    }
+
+    fn from_object(object: Object) -> Self {
+        let mut info = Self::default();
+
+        match object.kind {
+            ObjectKind::Sphere { origin, radius } => {
+                info.sphere_x = origin.x();
+                info.sphere_y = origin.y();
+                info.sphere_z = origin.z();
+                info.sphere_r = radius;
+                match object.material {
+                    Material::Lambertian { albedo } => {
+                        info.is_lambertian = 1.0;
+                        info.lr = albedo.x();
+                        info.lg = albedo.y();
+                        info.lb = albedo.z();
+                    }
+                    Material::Metal { albedo, fuzz } => {
+                        info.is_metal = 1.0;
+                        info.mr = albedo.x();
+                        info.mg = albedo.y();
+                        info.mb = albedo.z();
+                        info.mf = fuzz;
+                    }
+                    Material::Dielectric {
+                        index_of_refraction,
+                    } => {
+                        info.is_dielectric = 1.0;
+                        info.di = index_of_refraction;
+                    }
+                }
+            }
+        }
+
+        info
+    }
+}
+
+type Features = Array3<f64>;
+
+type Image = Array3<usize>;
+
+pub fn generate_render(n: usize, world: World) -> (Features, Image) {
     const SAMPLES_PER_PIXEL: usize = 50;
 
     let aspect_ratio = 1.0 / 1.0;
@@ -100,15 +179,22 @@ pub fn generate_render(n: usize, world: World) -> ArrayD<usize> {
 
     let width = n;
     let height = n;
-    let channel = 3;
 
-    let mut scene_matrix = ArrayD::<usize>::zeros(IxDyn(&[height, width, channel]));
+    let mut features = Features::zeros([CHANNELS, height, width]);
+    let mut image = Image::zeros([3, height, width]);
 
     let mut rng = rand::thread_rng();
     for j in 0..height {
         for i in 0..width {
-            let mut pixel_color = Color::new(0.0, 0.0, 0.0);
-            for _ in 0..SAMPLES_PER_PIXEL {
+            // first ray has no deviation
+            let u = i as f64 / (width - 1) as f64;
+            let v = j as f64 / (height - 1) as f64;
+
+            let ray = camera.ray(u, v);
+            let (pixel_info, mut pixel_color) = ray_info(&ray, &world);
+
+            // whilst subsequent rays do
+            for _ in 0..SAMPLES_PER_PIXEL - 1 {
                 let random_u: f64 = rng.gen();
                 let random_v: f64 = rng.gen();
 
@@ -116,7 +202,7 @@ pub fn generate_render(n: usize, world: World) -> ArrayD<usize> {
                 let v = (j as f64 + random_v) / (height - 1) as f64;
 
                 let ray = camera.ray(u, v);
-                pixel_color += ray_color(&ray, &world);
+                pixel_color += ray_info(&ray, &world).1;
             }
 
             let ir: usize = (256.0
@@ -132,89 +218,46 @@ pub fn generate_render(n: usize, world: World) -> ArrayD<usize> {
                     .sqrt()
                     .clamp(0.0, 0.999)) as usize;
 
-            scene_matrix[[j, i, 0]] = ir;
-            scene_matrix[[j, i, 1]] = ig;
-            scene_matrix[[j, i, 2]] = ib;
+            image[[0, j, i]] = ir;
+            image[[1, j, i]] = ig;
+            image[[2, j, i]] = ib;
+
+            features[[0, j, i]] = pixel_info.is_lambertian;
+            features[[1, j, i]] = pixel_info.is_metal;
+            features[[2, j, i]] = pixel_info.is_dielectric;
+            features[[3, j, i]] = pixel_info.is_nothing;
+            features[[4, j, i]] = pixel_info.is_sky;
+            features[[5, j, i]] = pixel_info.lr;
+            features[[6, j, i]] = pixel_info.lg;
+            features[[7, j, i]] = pixel_info.lb;
+            features[[8, j, i]] = pixel_info.mr;
+            features[[9, j, i]] = pixel_info.mg;
+            features[[10, j, i]] = pixel_info.mb;
+            features[[11, j, i]] = pixel_info.mf;
+            features[[12, j, i]] = pixel_info.di;
+            features[[13, j, i]] = pixel_info.sphere_x;
+            features[[14, j, i]] = pixel_info.sphere_y;
+            features[[15, j, i]] = pixel_info.sphere_z;
+            features[[16, j, i]] = pixel_info.sphere_r;
         }
     }
 
-    scene_matrix
-}
-
-#[derive(Clone, Copy)]
-pub struct Features {
-    features: [f64; 7],
-}
-
-impl Features {
-    pub fn from_sphere(object: &Object) -> Features {
-        let mut features = [0.0; 7];
-
-        match object.material {
-            material::Material::Lambertian { albedo } => {
-                features[0] = 1.0;
-                features[3] = albedo.x();
-                features[4] = albedo.y();
-                features[5] = albedo.z();
-            }
-            material::Material::Metal { albedo, fuzz } => {
-                features[1] = 1.0;
-                features[3] = albedo.x();
-                features[4] = albedo.y();
-                features[5] = albedo.z();
-                features[6] = fuzz;
-            }
-            material::Material::Dielectric {
-                index_of_refraction,
-            } => {
-                features[2] = 1.0;
-                features[6] = index_of_refraction;
-            }
-        }
-
-        Self { features }
-    }
-}
-
-impl Add for Features {
-    type Output = Self;
-
-    fn add(self, other: Self) -> Self::Output {
-        let mut accumulator = [0.0; 7];
-        for (index, value) in accumulator.iter_mut().enumerate() {
-            *value = self.features[index] + other.features[index]
-        }
-        Self {
-            features: accumulator,
-        }
-    }
-}
-
-impl Zero for Features {
-    fn zero() -> Self {
-        Self { features: [0.0; 7] }
-    }
-
-    fn is_zero(&self) -> bool {
-        self.features.iter().all(|v| *v == 0.0)
-    }
-}
-
-impl Index<usize> for Features {
-    type Output = f64;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.features[index]
-    }
+    (features, image)
 }
 
 #[pymodule]
 fn sphere_world(_: Python<'_>, m: &PyModule) -> PyResult<()> {
     #[pyfn(m)]
-    fn random_scene_render(py: Python<'_>) -> &PyArrayDyn<usize> {
+    fn random_scene_render(py: Python<'_>) -> &PyTuple {
         let scene = random_scene();
-        let render = generate_render(128, scene);
-        render.to_pyarray(py)
+        let (features, image) = generate_render(128, scene);
+        PyTuple::new(
+            py,
+            &[
+                features.to_pyarray(py).to_object(py),
+                image.to_pyarray(py).to_object(py),
+            ],
+        )
     }
 
     Ok(())

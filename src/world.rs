@@ -4,10 +4,12 @@ use crate::{
     vec3::Vec3, hit::Hit,
 };
 
+#[derive(Clone, Copy)]
 pub enum ObjectKind {
     Sphere { origin: Vec3, radius: f64 },
 }
 
+#[derive(Clone, Copy)]
 pub struct Object {
     pub kind: ObjectKind,
     pub material: Material,
@@ -39,7 +41,7 @@ impl Object {
                 let point = ray.at(root);
                 let mut hit = Hit {
                     t: root,
-                    material: self.material,
+                    object: *self,
                     normal: Vec3::new(0.0, 0.0, 0.0),
                     front_face: false,
                     point,
