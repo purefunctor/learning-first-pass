@@ -1,119 +1,51 @@
-import json
-from os import PathLike
 from pathlib import Path
-import re
 import torch
 
+from sphere_world import random_scene_render
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
-from torchvision.transforms import ToTensor
-
-
-def image_file_index(image_file: Path):
-    return int(str(image_file.name).removeprefix("image_").removesuffix(".json"))
-
-
-FILE_INDEX = re.compile("(render|volume)_(\d+).json")
-
-
-def get_file_index(image_file: Path):
-    return int(FILE_INDEX.search(str(image_file.name)).group(2))
 
 
 class Images(Dataset):
-    def __init__(self, image_directory: PathLike = None):
-        if image_directory is None:
-            image_directory = Path.cwd() / "output"
-        else:
-            image_directory = Path(image_directory)
-        self.image_directory = image_directory
-
-        self.render_files = list(image_directory.glob("render_*.json"))
-        self.volume_files = list(image_directory.glob("volume_*.json"))
-
-        self.render_files.sort(key=get_file_index)
-        self.volume_files.sort(key=get_file_index)
-
-        assert len(self.render_files) == len(self.volume_files)
+    def __init__(self, *, threshold, testing = False):
+        self.threshold = threshold
+        self.testing = testing
 
     def __getitem__(self, index):
-        render_json = self.render_files[index]
-        volume_json = self.volume_files[index]
-        with render_json.open("r") as f_r, volume_json.open("r") as f_v:
-            return (
-                torch.tensor(json.load(f_v), dtype=torch.float),
-                torch.tensor(json.load(f_r), dtype=torch.float),
-            )
+        features, target = random_scene_render(index)
+        return (
+            torch.tensor(features, dtype=torch.float),
+            torch.tensor(target, dtype=torch.float),
+        )
 
     def __len__(self):
-        return len(self.render_files)
+        if self.testing:
+            return 1000 - self.threshold
+        else:
+            return self.threshold
 
 
-class Model(nn.Module):
+class Raycaster(nn.Module):
     def __init__(self):
         super().__init__()
-
-        self.conv3d_0 = nn.Conv3d(
-            in_channels=7, out_channels=128, kernel_size=5, padding="same"
+        self.sequence = nn.Sequential(
+            nn.Conv2d(in_channels=17, out_channels=128, kernel_size=3, padding="same"),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, padding="same"),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=64, out_channels=3, kernel_size=3, padding="same"),
+            nn.BatchNorm2d(3),
+            nn.ReLU(),
+            nn.Sigmoid(),
         )
-        self.batchNorm3d_0 = nn.BatchNorm3d(128)
-        self.maxpool_0 = nn.MaxPool3d(
-            kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1)
-        )
-        self.relu_0 = nn.ReLU()
-
-        self.conv3d_1 = nn.Conv3d(
-            in_channels=128, out_channels=64, kernel_size=5, padding="same"
-        )
-        self.batchNorm3d_1 = nn.BatchNorm3d(64)
-        self.maxpool_1 = nn.MaxPool3d(kernel_size=(16, 1, 1), stride=(1, 1, 1))
-        self.relu_1 = nn.ReLU()
-
-        self.conv2d_2 = nn.Conv2d(
-            in_channels=64, out_channels=32, kernel_size=3, padding="same"
-        )
-        self.batchNorm2d_2 = nn.BatchNorm2d(32)
-        self.relu_2 = nn.ReLU()
-
-        self.conv2d_3 = nn.Conv2d(
-            in_channels=32, out_channels=3, kernel_size=3, padding="same"
-        )
-        self.batchNorm2d_3 = nn.BatchNorm2d(3)
-        self.relu_3 = nn.ReLU()
-
-        self.sigmoid_4 = nn.Sigmoid()
 
     def forward(self, x):
-        x = self.conv3d_0(x)
-        x = self.batchNorm3d_0(x)
-        x = self.maxpool_0(x)
-        x = self.relu_0(x)
-
-        x = self.conv3d_1(x)
-        x = self.batchNorm3d_1(x)
-        x = self.maxpool_1(x)
-        x = self.relu_1(x)
-
-        x = torch.sum(x, dim=2)
-
-        x = self.conv2d_2(x)
-        x = self.batchNorm2d_2(x)
-        x = self.relu_2(x)
-
-        x = self.conv2d_3(x)
-        x = self.batchNorm2d_3(x)
-        x = self.relu_3(x)
-
-        return self.sigmoid_4(x)
-
-
-device = "cpu"
-
-print(f"Using Device: {device}")
+        return self.sequence(x)
 
 
 def train(dataloader, model, loss_fn, optimizer):
-    model.train()
     size = len(dataloader.dataset)
     for batch, (X, y) in enumerate(dataloader):
         X, y = X.to(device), y.to(device)
@@ -132,7 +64,6 @@ def test(dataloader, model, loss_fn):
     num_batches = len(dataloader)
     test_loss = 0
     with torch.no_grad():
-        raycaster.eval()
         for X, y in dataloader:
             X, y = X.to(device), y.to(device)
             pred = model(X)
@@ -142,13 +73,20 @@ def test(dataloader, model, loss_fn):
 
 
 if __name__ == "__main__":
-    training_data = Images(image_directory="output-train")
-    test_data = Images(image_directory="output-test")
+    if torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
 
-    training_dataloader = DataLoader(training_data, batch_size=2)
-    test_dataloader = DataLoader(test_data, batch_size=2)
+    print(f"Using Device: {device}")
 
-    raycaster = Model().to(device)
+    training_data = Images(threshold=800, testing=False)
+    test_data = Images(threshold=800, testing=True)
+
+    training_dataloader = DataLoader(training_data, batch_size=100)
+    test_dataloader = DataLoader(test_data, batch_size=100)
+
+    raycaster = Raycaster().to(device)
     loss_fn = nn.MSELoss()
     learning_rate = 1e-3
     optimizer = torch.optim.Adam(raycaster.parameters(), learning_rate)
@@ -171,7 +109,11 @@ if __name__ == "__main__":
 
     for epoch in range(epochs, epochs + 10):
         print(f"Epoch {epoch}")
+
+        raycaster.train()
         train(training_dataloader, raycaster, loss_fn, optimizer)
+
+        raycaster.eval()
         test(test_dataloader, raycaster, loss_fn)
 
     print("Done!")

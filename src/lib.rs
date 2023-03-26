@@ -5,7 +5,7 @@ use numpy::ToPyArray;
 use pyo3::{
     pymodule,
     types::{PyModule, PyTuple},
-    PyResult, Python, ToPyObject,
+    PyResult, Python,
 };
 use ray::Ray;
 use seed::Seed;
@@ -155,9 +155,9 @@ impl Info {
 
 type Features = Array3<f64>;
 
-type Image = Array3<usize>;
+type Target = Array3<f64>;
 
-pub fn generate_render(n: usize, world: World) -> (Features, Image) {
+pub fn generate_render(n: usize, world: World) -> (Features, Target) {
     const SAMPLES_PER_PIXEL: usize = 50;
 
     let aspect_ratio = 1.0;
@@ -183,7 +183,7 @@ pub fn generate_render(n: usize, world: World) -> (Features, Image) {
     let height = n;
 
     let mut features = Features::zeros([CHANNELS, height, width]);
-    let mut image = Image::zeros([3, height, width]);
+    let mut target = Target::zeros([3, height, width]);
 
     for j in 0..height {
         for i in 0..width {
@@ -206,22 +206,22 @@ pub fn generate_render(n: usize, world: World) -> (Features, Image) {
                 pixel_color += ray_info(&ray, &world).1;
             }
 
-            let ir: usize = (256.0
+            let ir = 256.0
                 * (pixel_color.x() / (SAMPLES_PER_PIXEL as f64))
                     .sqrt()
-                    .clamp(0.0, 0.999)) as usize;
-            let ig: usize = (256.0
+                    .clamp(0.0, 0.999);
+            let ig = 256.0
                 * (pixel_color.y() / (SAMPLES_PER_PIXEL as f64))
                     .sqrt()
-                    .clamp(0.0, 0.999)) as usize;
-            let ib: usize = (256.0
+                    .clamp(0.0, 0.999);
+            let ib = 256.0
                 * (pixel_color.z() / (SAMPLES_PER_PIXEL as f64))
                     .sqrt()
-                    .clamp(0.0, 0.999)) as usize;
+                    .clamp(0.0, 0.999);
 
-            image[[0, j, i]] = ir;
-            image[[1, j, i]] = ig;
-            image[[2, j, i]] = ib;
+            target[[0, j, i]] = ir;
+            target[[1, j, i]] = ig;
+            target[[2, j, i]] = ib;
 
             features[[0, j, i]] = pixel_info.is_lambertian;
             features[[1, j, i]] = pixel_info.is_metal;
@@ -243,7 +243,7 @@ pub fn generate_render(n: usize, world: World) -> (Features, Image) {
         }
     }
 
-    (features, image)
+    (features, target)
 }
 
 #[pymodule]
@@ -253,15 +253,9 @@ fn sphere_world(_: Python<'_>, m: &PyModule) -> PyResult<()> {
         Seed::set_seed(seed);
 
         let scene = random_scene();
-        let (features, image) = generate_render(128, scene);
+        let (features, target) = generate_render(64, scene);
 
-        PyTuple::new(
-            py,
-            &[
-                features.to_pyarray(py).to_object(py),
-                image.to_pyarray(py).to_object(py),
-            ],
-        )
+        PyTuple::new(py, &[features.to_pyarray(py), target.to_pyarray(py)])
     }
 
     Ok(())
