@@ -1,147 +1,65 @@
 use std::ops::{Add, Index};
 
 use camera::Camera;
-use hittable::Hittable;
-use hittable::World;
 use material::Material;
-use ndarray::{Array3, ArrayD, IxDyn};
+use ndarray::{ArrayD, IxDyn};
 use num_traits::Zero;
 use numpy::{PyArrayDyn, ToPyArray};
-use object::Sphere;
 use pyo3::{pymodule, types::PyModule, PyResult, Python};
 use rand::Rng;
 use ray::Ray;
 use vec3::{Color, Point3, Vec3};
+use world::{Object, ObjectKind, World};
 
 mod camera;
-mod hittable;
 mod material;
-mod object;
 mod ray;
 mod vec3;
+mod world;
+mod hit;
 
-pub fn random_scene() -> Vec<Sphere> {
+pub fn random_scene() -> World {
     let mut rng = rand::thread_rng();
     let mut scene = Vec::new();
 
     for a in -11..=11 {
         for b in -11..=11 {
-            let choose_mat: f64 = rng.gen();
-            let sphere_size: f64 = rng.gen_range(0.49..0.5);
+            let random_material: f64 = rng.gen();
 
-            let center = Point3::new(
+            let origin = Point3::new(
                 (a as f64) + rng.gen_range(0.0..0.9),
                 0.2,
                 (b as f64) + rng.gen_range(0.0..0.9),
             );
 
-            if choose_mat < 0.50 {
-                let albedo = Color::random(0.0..1.0) * Color::random(0.0..1.0);
-                let sphere_mat = Material::Lambertian { albedo };
-                let sphere = Sphere::new(center, sphere_size, sphere_mat);
-                scene.push(sphere);
-            } else if choose_mat < 0.75 {
-                let albedo = Color::random(0.4..1.0);
-                let fuzz = rng.gen_range(0.0..0.5);
-                let sphere_mat = Material::Metal { albedo, fuzz };
-                let sphere = Sphere::new(center, sphere_size, sphere_mat);
-                scene.push(sphere)
+            let radius: f64 = rng.gen_range(0.49..0.5);
+
+            let kind = ObjectKind::Sphere { origin, radius };
+
+            if random_material < 0.50 {
+                let material = Material::Lambertian {
+                    albedo: Color::random(0.0..1.0) * Color::random(0.0..1.0),
+                };
+                let object = Object { kind, material };
+                scene.push(object);
+            } else if random_material < 0.75 {
+                let material = Material::Metal {
+                    albedo: Color::random(0.4..1.0),
+                    fuzz: rng.gen_range(0.0..0.5),
+                };
+                let object = Object { kind, material };
+                scene.push(object)
             } else {
-                let sphere_mat = Material::Dielectric {
+                let material = Material::Dielectric {
                     index_of_refraction: 1.5,
                 };
-                let sphere = Sphere::new(center, sphere_size, sphere_mat);
-                scene.push(sphere)
+                let object = Object { kind, material };
+                scene.push(object);
             }
         }
     }
 
-    scene
-}
-
-fn compute_bounds(scene: &[Sphere]) -> (Vec3, Vec3) {
-    let mut min_bounds = vec![f64::INFINITY, f64::INFINITY, f64::INFINITY];
-    let mut max_bounds = vec![f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
-
-    for sphere in scene.iter() {
-        let (x, y, z) = sphere.center.as_tuple();
-
-        let min_coords = vec![x - sphere.radius, y - sphere.radius, z - sphere.radius];
-
-        let max_coords = vec![x + sphere.radius, y + sphere.radius, z + sphere.radius];
-
-        for i in 0..3 {
-            min_bounds[i] = min_bounds[i].min(min_coords[i]);
-            max_bounds[i] = max_bounds[i].max(max_coords[i]);
-        }
-    }
-
-    assert!(min_bounds < max_bounds);
-
-    (
-        Vec3::new(min_bounds[0], min_bounds[1], min_bounds[2]),
-        Vec3::new(max_bounds[0], max_bounds[1], max_bounds[2]),
-    )
-}
-
-fn inside_sphere(point: Vec3, sphere: &Sphere) -> bool {
-    let origin = sphere.center;
-    let radius = sphere.radius;
-    let distance = (point.x() - origin.x()).powi(2)
-        + (point.y() - origin.y()).powi(2)
-        + (point.z() - origin.z()).powi(2);
-    distance <= radius.powi(2)
-}
-
-pub fn generate_volume(n: usize, scene: &[Sphere]) -> Vec<Vec<Vec<Vec<f64>>>> {
-    let (min_bounds, max_bounds) = compute_bounds(&scene);
-
-    let w: usize = n;
-    let h: usize = n;
-    let d: usize = n;
-
-    let mut scene_ndarray: Array3<Features> = Array3::zeros((w, h, d));
-
-    // let x_d = max_bounds.x() - min_bounds.x();
-    // let y_d = max_bounds.y() - min_bounds.y();
-    // let z_d = max_bounds.z() - min_bounds.z();
-    // let d_m = x_d.max(y_d).max(z_d);
-
-    // let dx = (x_d + d_m - x_d) / w as f64;
-    // let dy = (y_d + d_m - y_d) / h as f64;
-    // let dz = (z_d + d_m - z_d) / d as f64;
-
-    let dx = (max_bounds.x() - min_bounds.x()) / w as f64;
-    let dy = (max_bounds.y() - min_bounds.y()) / h as f64;
-    let dz = (max_bounds.z() - min_bounds.z()) / d as f64;
-
-    for ((i, j, k), v) in scene_ndarray.indexed_iter_mut() {
-        let point = Vec3::new(
-            min_bounds.x() + (i as f64 * dx),
-            min_bounds.y() + (j as f64 * dy),
-            min_bounds.z() + (k as f64 * dz),
-        );
-        for sphere in scene.iter() {
-            if inside_sphere(point, sphere) {
-                *v = Features::from_sphere(sphere);
-                continue;
-            }
-        }
-    }
-
-    let mut scene_matrix = vec![vec![vec![vec![0.0; w]; h]; d]; 7];
-
-    for i_c in 0..7 {
-        for i_d in 0..d {
-            for i_h in 0..h {
-                for i_w in 0..w {
-                    scene_matrix[i_c][i_d][i_h][i_w] = scene_ndarray[(i_w, i_h, i_d)][i_c];
-                }
-            }
-        }
-    }
-
-    scene_matrix
+    World(scene)
 }
 
 pub fn ray_color(r: &Ray, w: &World) -> Color {
@@ -158,12 +76,7 @@ pub fn ray_color(r: &Ray, w: &World) -> Color {
     }
 }
 
-pub fn generate_render(n: usize, scene: Vec<Sphere>) -> ArrayD<usize> {
-    let mut world: World = vec![];
-    for sphere in scene.into_iter() {
-        world.push(Box::new(sphere));
-    }
-
+pub fn generate_render(n: usize, world: World) -> ArrayD<usize> {
     const SAMPLES_PER_PIXEL: usize = 50;
 
     let aspect_ratio = 1.0 / 1.0;
@@ -234,10 +147,10 @@ pub struct Features {
 }
 
 impl Features {
-    pub fn from_sphere(sphere: &Sphere) -> Features {
+    pub fn from_sphere(object: &Object) -> Features {
         let mut features = [0.0; 7];
 
-        match sphere.material {
+        match object.material {
             material::Material::Lambertian { albedo } => {
                 features[0] = 1.0;
                 features[3] = albedo.x();

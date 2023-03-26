@@ -1,7 +1,7 @@
 use rand::Rng;
 
 use crate::{
-    hittable::Hit,
+    hit::Hit,
     ray::Ray,
     vec3::{Color, Vec3},
 };
