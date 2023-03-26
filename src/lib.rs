@@ -7,8 +7,8 @@ use pyo3::{
     types::{PyModule, PyTuple},
     PyResult, Python, ToPyObject,
 };
-use rand::Rng;
 use ray::Ray;
+use seed::Seed;
 use vec3::{Color, Point3, Vec3};
 use world::{Object, ObjectKind, World};
 
@@ -16,24 +16,24 @@ mod camera;
 mod hit;
 mod material;
 mod ray;
+mod seed;
 mod vec3;
 mod world;
 
 pub fn random_scene() -> World {
-    let mut rng = rand::thread_rng();
     let mut scene = Vec::new();
 
     for a in -11..=11 {
         for b in -11..=11 {
-            let random_material: f64 = rng.gen();
+            let random_material: f64 = Seed::gen();
 
             let origin = Point3::new(
-                (a as f64) + rng.gen_range(0.0..0.9),
+                (a as f64) + Seed::gen_range(0.0..0.9),
                 0.2,
-                (b as f64) + rng.gen_range(0.0..0.9),
+                (b as f64) + Seed::gen_range(0.0..0.9),
             );
 
-            let radius: f64 = rng.gen_range(0.49..0.5);
+            let radius: f64 = Seed::gen_range(0.49..0.5);
 
             let kind = ObjectKind::Sphere { origin, radius };
 
@@ -46,7 +46,7 @@ pub fn random_scene() -> World {
             } else if random_material < 0.75 {
                 let material = Material::Metal {
                     albedo: Color::random(0.4..1.0),
-                    fuzz: rng.gen_range(0.0..0.5),
+                    fuzz: Seed::gen_range(0.0..0.5),
                 };
                 let object = Object { kind, material };
                 scene.push(object)
@@ -103,15 +103,17 @@ pub struct Info {
 
 impl Info {
     fn from_nothing() -> Self {
-        let mut info = Self::default();
-        info.is_nothing = 1.0;
-        info
+        Self {
+            is_nothing: 1.0,
+            ..Default::default()
+        }
     }
 
     fn from_sky() -> Self {
-        let mut info = Self::default();
-        info.is_sky = 1.0;
-        info
+        Self {
+            is_sky: 1.0,
+            ..Default::default()
+        }
     }
 
     fn from_object(object: Object) -> Self {
@@ -158,7 +160,7 @@ type Image = Array3<usize>;
 pub fn generate_render(n: usize, world: World) -> (Features, Image) {
     const SAMPLES_PER_PIXEL: usize = 50;
 
-    let aspect_ratio = 1.0 / 1.0;
+    let aspect_ratio = 1.0;
     let look_from = Point3::new(13.0, 2.0, 3.0);
     let look_at = Point3::new(0.0, 0.0, 0.0);
     let v_up = Vec3::new(0.0, 1.0, 0.0);
@@ -183,7 +185,6 @@ pub fn generate_render(n: usize, world: World) -> (Features, Image) {
     let mut features = Features::zeros([CHANNELS, height, width]);
     let mut image = Image::zeros([3, height, width]);
 
-    let mut rng = rand::thread_rng();
     for j in 0..height {
         for i in 0..width {
             // first ray has no deviation
@@ -195,8 +196,8 @@ pub fn generate_render(n: usize, world: World) -> (Features, Image) {
 
             // whilst subsequent rays do
             for _ in 0..SAMPLES_PER_PIXEL - 1 {
-                let random_u: f64 = rng.gen();
-                let random_v: f64 = rng.gen();
+                let random_u: f64 = Seed::gen();
+                let random_v: f64 = Seed::gen();
 
                 let u = (i as f64 + random_u) / (width - 1) as f64;
                 let v = (j as f64 + random_v) / (height - 1) as f64;
@@ -248,9 +249,12 @@ pub fn generate_render(n: usize, world: World) -> (Features, Image) {
 #[pymodule]
 fn sphere_world(_: Python<'_>, m: &PyModule) -> PyResult<()> {
     #[pyfn(m)]
-    fn random_scene_render(py: Python<'_>) -> &PyTuple {
+    fn random_scene_render(py: Python<'_>, seed: u64) -> &PyTuple {
+        Seed::set_seed(seed);
+
         let scene = random_scene();
         let (features, image) = generate_render(128, scene);
+
         PyTuple::new(
             py,
             &[

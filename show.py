@@ -3,13 +3,21 @@ from sphere_world import random_scene_render
 
 figure = plt.figure()
 
-features, image = random_scene_render()
+features0, image0 = random_scene_render(2)
+_, image1 = random_scene_render(2)
 
-print(f"Got input features of shape {features.shape}")
-print(f"Got expected output of shape {image.shape}")
+print(f"Got input features of shape {features0.shape}")
+print(f"Got expected output of shape {image0.shape}")
 
-ax = figure.add_subplot(1, 1, 1)
-ax.imshow(image.transpose((1, 2, 0)))
+ax = figure.add_subplot(1, 2, 1)
+
+ax.imshow(image0.transpose((1, 2, 0)))
+ax.invert_yaxis()
+ax.set_title("Scene (Render)")
+
+ax = figure.add_subplot(1, 2, 2)
+
+ax.imshow(image1.transpose((1, 2, 0)))
 ax.invert_yaxis()
 ax.set_title("Scene (Render)")
 

@@ -3,7 +3,7 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Range, Sub, SubAssign},
 };
 
-use rand::Rng;
+use crate::seed::Seed;
 
 #[derive(Clone, Copy)]
 pub struct Vec3 {
@@ -79,12 +79,11 @@ impl Vec3 {
     }
 
     pub fn random(r: Range<f64>) -> Self {
-        let mut rng = rand::thread_rng();
         Self {
             e: [
-                rng.gen_range(r.clone()),
-                rng.gen_range(r.clone()),
-                rng.gen_range(r.clone()),
+                Seed::gen_range(r.clone()),
+                Seed::gen_range(r.clone()),
+                Seed::gen_range(r),
             ],
         }
     }
@@ -124,10 +123,8 @@ impl Vec3 {
     }
 
     pub fn random_in_unit_disk() -> Vec3 {
-        let mut rng = rand::thread_rng();
-
         loop {
-            let p = Vec3::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0), 0.0);
+            let p = Vec3::new(Seed::gen_range(-1.0..1.0), Seed::gen_range(-1.0..1.0), 0.0);
             if p.length_squared() < 1.0 {
                 return p;
             }

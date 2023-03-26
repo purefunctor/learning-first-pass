@@ -1,8 +1,4 @@
-use crate::{
-    material::Material,
-    ray::Ray,
-    vec3::Vec3, hit::Hit,
-};
+use crate::{hit::Hit, material::Material, ray::Ray, vec3::Vec3};
 
 #[derive(Clone, Copy)]
 pub enum ObjectKind {

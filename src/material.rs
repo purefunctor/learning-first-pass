@@ -1,8 +1,7 @@
-use rand::Rng;
-
 use crate::{
     hit::Hit,
     ray::Ray,
+    seed::Seed,
     vec3::{Color, Vec3},
 };
 
@@ -48,10 +47,9 @@ impl Material {
                 let cos_theta = (-1.0 * unit_direction).dot(hit.normal).min(1.0);
                 let sin_theta = (1.0 - cos_theta.powi(2)).sqrt();
 
-                let mut rng = rand::thread_rng();
                 let cannot_refract = refraction_ratio * sin_theta > 1.0;
                 let will_reflect =
-                    rng.gen::<f64>() < dielectric_reflectance(cos_theta, refraction_ratio);
+                    Seed::gen() < dielectric_reflectance(cos_theta, refraction_ratio);
 
                 let direction = if cannot_refract || will_reflect {
                     unit_direction.reflect(hit.normal)
