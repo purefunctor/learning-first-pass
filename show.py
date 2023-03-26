@@ -6,8 +6,8 @@ figure = plt.figure()
 features0, image0 = random_scene_render(2)
 _, image1 = random_scene_render(2)
 
-print(f"Got input features of shape {features0.shape}")
-print(f"Got expected output of shape {image0.shape}")
+print(f"Got features of shape {features0.shape}")
+print(f"Got target of shape {image0.shape}")
 
 ax = figure.add_subplot(1, 2, 1)
 
