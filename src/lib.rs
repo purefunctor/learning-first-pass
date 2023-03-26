@@ -1,20 +1,14 @@
-use std::{
-    fs::{self, File},
-    io::BufWriter,
-    ops::{Add, Index},
-    path::Path,
-    sync::Arc,
-};
+use std::ops::{Add, Index};
 
 use camera::Camera;
-use clap::Parser;
 use hittable::Hittable;
 use hittable::World;
-use indicatif::{ProgressIterator, ProgressStyle};
-use material::{Dielectric, Lambertian, Metal};
-use ndarray::Array3;
+use material::Material;
+use ndarray::{Array3, ArrayD, IxDyn};
 use num_traits::Zero;
+use numpy::{PyArrayDyn, ToPyArray};
 use object::Sphere;
+use pyo3::{pymodule, types::PyModule, PyResult, Python};
 use rand::Rng;
 use ray::Ray;
 use vec3::{Color, Point3, Vec3};
@@ -26,12 +20,12 @@ mod object;
 mod ray;
 mod vec3;
 
-fn random_scene() -> Vec<Sphere> {
+pub fn random_scene() -> Vec<Sphere> {
     let mut rng = rand::thread_rng();
     let mut scene = Vec::new();
 
-    for a in -1..=1 {
-        for b in -1..=1 {
+    for a in -11..=11 {
+        for b in -11..=11 {
             let choose_mat: f64 = rng.gen();
             let sphere_size: f64 = rng.gen_range(0.49..0.5);
 
@@ -43,17 +37,19 @@ fn random_scene() -> Vec<Sphere> {
 
             if choose_mat < 0.50 {
                 let albedo = Color::random(0.0..1.0) * Color::random(0.0..1.0);
-                let sphere_mat = Arc::new(Lambertian::new(albedo));
+                let sphere_mat = Material::Lambertian { albedo };
                 let sphere = Sphere::new(center, sphere_size, sphere_mat);
                 scene.push(sphere);
             } else if choose_mat < 0.75 {
                 let albedo = Color::random(0.4..1.0);
                 let fuzz = rng.gen_range(0.0..0.5);
-                let sphere_mat = Arc::new(Metal::new(albedo, fuzz));
+                let sphere_mat = Material::Metal { albedo, fuzz };
                 let sphere = Sphere::new(center, sphere_size, sphere_mat);
                 scene.push(sphere)
             } else {
-                let sphere_mat = Arc::new(Dielectric::new(1.5));
+                let sphere_mat = Material::Dielectric {
+                    index_of_refraction: 1.5,
+                };
                 let sphere = Sphere::new(center, sphere_size, sphere_mat);
                 scene.push(sphere)
             }
@@ -97,7 +93,7 @@ fn inside_sphere(point: Vec3, sphere: &Sphere) -> bool {
     distance <= radius.powi(2)
 }
 
-fn generate_volume(n: usize, scene: &[Sphere]) -> Vec<Vec<Vec<Vec<f64>>>> {
+pub fn generate_volume(n: usize, scene: &[Sphere]) -> Vec<Vec<Vec<Vec<f64>>>> {
     let (min_bounds, max_bounds) = compute_bounds(&scene);
 
     let w: usize = n;
@@ -148,7 +144,7 @@ fn generate_volume(n: usize, scene: &[Sphere]) -> Vec<Vec<Vec<Vec<f64>>>> {
     scene_matrix
 }
 
-fn ray_color(r: &Ray, w: &World) -> Color {
+pub fn ray_color(r: &Ray, w: &World) -> Color {
     if let Some(hit) = w.hit(r, 0.001, f64::INFINITY) {
         if let Some((attenuation, _)) = hit.material.scatter(r, &hit) {
             attenuation
@@ -162,7 +158,7 @@ fn ray_color(r: &Ray, w: &World) -> Color {
     }
 }
 
-fn generate_render(n: usize, scene: Vec<Sphere>) -> Vec<Vec<Vec<usize>>> {
+pub fn generate_render(n: usize, scene: Vec<Sphere>) -> ArrayD<usize> {
     let mut world: World = vec![];
     for sphere in scene.into_iter() {
         world.push(Box::new(sphere));
@@ -193,7 +189,7 @@ fn generate_render(n: usize, scene: Vec<Sphere>) -> Vec<Vec<Vec<usize>>> {
     let height = n;
     let channel = 3;
 
-    let mut scene_matrix = vec![vec![vec![0; height]; width]; channel];
+    let mut scene_matrix = ArrayD::<usize>::zeros(IxDyn(&[height, width, channel]));
 
     let mut rng = rand::thread_rng();
     for j in 0..height {
@@ -223,9 +219,9 @@ fn generate_render(n: usize, scene: Vec<Sphere>) -> Vec<Vec<Vec<usize>>> {
                     .sqrt()
                     .clamp(0.0, 0.999)) as usize;
 
-            scene_matrix[0][i][j] = ir;
-            scene_matrix[1][i][j] = ig;
-            scene_matrix[2][i][j] = ib;
+            scene_matrix[[j, i, 0]] = ir;
+            scene_matrix[[j, i, 1]] = ig;
+            scene_matrix[[j, i, 2]] = ib;
         }
     }
 
@@ -233,32 +229,35 @@ fn generate_render(n: usize, scene: Vec<Sphere>) -> Vec<Vec<Vec<usize>>> {
 }
 
 #[derive(Clone, Copy)]
-struct Features {
+pub struct Features {
     features: [f64; 7],
 }
 
 impl Features {
-    fn from_sphere(sphere: &Sphere) -> Features {
+    pub fn from_sphere(sphere: &Sphere) -> Features {
         let mut features = [0.0; 7];
 
-        let any_material = sphere.material.as_any();
-        if let Some(material) = any_material.downcast_ref::<Lambertian>() {
-            features[0] = 1.0;
-            features[3] = material.albedo.x();
-            features[4] = material.albedo.y();
-            features[5] = material.albedo.z();
-        } else if let Some(material) = any_material.downcast_ref::<Metal>() {
-            features[1] = 1.0;
-            features[3] = material.albedo.x();
-            features[4] = material.albedo.y();
-            features[5] = material.albedo.z();
-            features[6] = material.fuzz;
-        } else if let Some(material) = any_material.downcast_ref::<Dielectric>() {
-            features[2] = 1.0;
-            features[6] = material.index_of_refraction;
-        } else {
-            unreachable!("Unhandled material!");
-        };
+        match sphere.material {
+            material::Material::Lambertian { albedo } => {
+                features[0] = 1.0;
+                features[3] = albedo.x();
+                features[4] = albedo.y();
+                features[5] = albedo.z();
+            }
+            material::Material::Metal { albedo, fuzz } => {
+                features[1] = 1.0;
+                features[3] = albedo.x();
+                features[4] = albedo.y();
+                features[5] = albedo.z();
+                features[6] = fuzz;
+            }
+            material::Material::Dielectric {
+                index_of_refraction,
+            } => {
+                features[2] = 1.0;
+                features[6] = index_of_refraction;
+            }
+        }
 
         Self { features }
     }
@@ -296,45 +295,14 @@ impl Index<usize> for Features {
     }
 }
 
-#[derive(Parser)]
-struct Args {
-    #[arg(help = "The sample size", default_value = "100")]
-    count: usize,
-    #[arg(long, help = "The output path")]
-    output: String,
-    #[arg(long, help = "The size of the volume", default_value = "64")]
-    size: usize,
-}
-
-fn main() {
-    let args = Args::parse();
-
-    let output_path = Path::new(&args.output);
-    if !output_path.exists() {
-        fs::create_dir(output_path).unwrap();
-    }
-
-    for batch in (0..args.count).progress_with_style(
-        ProgressStyle::with_template(
-            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-        )
-        .unwrap(),
-    ) {
+#[pymodule]
+fn sphere_world(_: Python<'_>, m: &PyModule) -> PyResult<()> {
+    #[pyfn(m)]
+    fn random_scene_render(py: Python<'_>) -> &PyArrayDyn<usize> {
         let scene = random_scene();
-        let scene_as_volume = generate_volume(args.size, &scene);
-        let scene_as_render = generate_render(args.size, scene);
-
-        let volume_path = output_path
-            .join(format!("volume_{}", batch))
-            .with_extension("json");
-        let render_path = output_path
-            .join(format!("render_{}", batch))
-            .with_extension("json");
-
-        let volume_file = BufWriter::new(File::create(volume_path).unwrap());
-        let render_file = BufWriter::new(File::create(render_path).unwrap());
-
-        serde_json::to_writer(volume_file, &scene_as_volume).unwrap();
-        serde_json::to_writer(render_file, &scene_as_render).unwrap();
+        let render = generate_render(128, scene);
+        render.to_pyarray(py)
     }
+
+    Ok(())
 }

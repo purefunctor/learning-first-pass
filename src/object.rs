@@ -1,8 +1,6 @@
-use std::sync::Arc;
-
 use crate::{
     hittable::{Hit, Hittable},
-    material::Scatter,
+    material::Material,
     ray::Ray,
     vec3::{Point3, Vec3},
 };
@@ -10,11 +8,11 @@ use crate::{
 pub struct Sphere {
     pub radius: f64,
     pub center: Point3,
-    pub material: Arc<dyn Scatter>,
+    pub material: Material,
 }
 
 impl Sphere {
-    pub fn new(center: Point3, radius: f64, material: Arc<dyn Scatter>) -> Self {
+    pub fn new(center: Point3, radius: f64, material: Material) -> Self {
         Self {
             center,
             radius,
@@ -47,7 +45,7 @@ impl Hittable for Sphere {
         let point = r.at(root);
         let mut hit = Hit {
             t: root,
-            material: self.material.clone(),
+            material: self.material,
             normal: Vec3::new(0.0, 0.0, 0.0),
             front_face: false,
             point,
