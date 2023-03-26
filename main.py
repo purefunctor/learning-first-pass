@@ -5,10 +5,11 @@ from sphere_world import random_scene_render
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
+IMAGE_COUNT = 1_000
+TEST_THRESHOLD = 0.2
 
 class Images(Dataset):
-    def __init__(self, *, threshold, testing = False):
-        self.threshold = threshold
+    def __init__(self, *, testing = False):
         self.testing = testing
 
     def __getitem__(self, index):
@@ -20,16 +21,16 @@ class Images(Dataset):
 
     def __len__(self):
         if self.testing:
-            return 1000 - self.threshold
+            return int(IMAGE_COUNT * TEST_THRESHOLD)
         else:
-            return self.threshold
+            return int(IMAGE_COUNT * (1 - TEST_THRESHOLD))
 
 
 class Raycaster(nn.Module):
     def __init__(self):
         super().__init__()
         self.sequence = nn.Sequential(
-            nn.Conv2d(in_channels=17, out_channels=128, kernel_size=3, padding="same"),
+            nn.Conv2d(in_channels=20, out_channels=128, kernel_size=3, padding="same"),
             nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, padding="same"),
@@ -61,15 +62,17 @@ def train(dataloader, model, loss_fn, optimizer):
 
 
 def test(dataloader, model, loss_fn):
-    num_batches = len(dataloader)
-    test_loss = 0
+    size = len(dataloader.dataset)
+    loss = 0
     with torch.no_grad():
-        for X, y in dataloader:
+        for batch, (X, y) in enumerate(dataloader):
             X, y = X.to(device), y.to(device)
             pred = model(X)
-            test_loss += loss_fn(pred, y).item()
-    test_loss /= num_batches
-    print(f"Test Error: \n Average Loss: {test_loss:>8f} \n")
+            loss += loss_fn(pred, y).item()
+            current = (batch + 1) * len(X)
+            print(f"Loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+    loss /= len(dataloader)
+    print(f"Test Error: \n Average Loss: {loss:>7f} \n")
 
 
 if __name__ == "__main__":
@@ -80,8 +83,8 @@ if __name__ == "__main__":
 
     print(f"Using Device: {device}")
 
-    training_data = Images(threshold=800, testing=False)
-    test_data = Images(threshold=800, testing=True)
+    training_data = Images(testing=False)
+    test_data = Images(testing=True)
 
     training_dataloader = DataLoader(training_data, batch_size=100)
     test_dataloader = DataLoader(test_data, batch_size=100)

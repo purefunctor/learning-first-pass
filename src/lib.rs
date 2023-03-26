@@ -23,8 +23,8 @@ mod world;
 pub fn random_scene() -> World {
     let mut scene = Vec::new();
 
-    for a in -11..=11 {
-        for b in -11..=11 {
+    for a in -3..3 {
+        for b in -3..3 {
             let random_material: f64 = Seed::gen();
 
             let origin = Point3::new(
@@ -74,11 +74,11 @@ pub fn ray_info(ray: &Ray, world: &World) -> (Info, Color) {
         let unit_direction = ray.direction.normalized();
         let t = 0.5 * (unit_direction.y() + 1.0);
         let color = (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
-        (Info::from_sky(), color)
+        (Info::from_sky(color), color)
     }
 }
 
-const CHANNELS: usize = 17;
+const CHANNELS: usize = 20;
 
 #[derive(Default)]
 pub struct Info {
@@ -99,6 +99,9 @@ pub struct Info {
     sphere_y: f64,
     sphere_z: f64,
     sphere_r: f64,
+    color_x: f64,
+    color_y: f64,
+    color_z: f64,
 }
 
 impl Info {
@@ -109,9 +112,12 @@ impl Info {
         }
     }
 
-    fn from_sky() -> Self {
+    fn from_sky(color: Color) -> Self {
         Self {
             is_sky: 1.0,
+            color_x: color.x(),
+            color_y: color.y(),
+            color_z: color.z(),
             ..Default::default()
         }
     }
@@ -206,18 +212,9 @@ pub fn generate_render(n: usize, world: World) -> (Features, Target) {
                 pixel_color += ray_info(&ray, &world).1;
             }
 
-            let ir = 256.0
-                * (pixel_color.x() / (SAMPLES_PER_PIXEL as f64))
-                    .sqrt()
-                    .clamp(0.0, 0.999);
-            let ig = 256.0
-                * (pixel_color.y() / (SAMPLES_PER_PIXEL as f64))
-                    .sqrt()
-                    .clamp(0.0, 0.999);
-            let ib = 256.0
-                * (pixel_color.z() / (SAMPLES_PER_PIXEL as f64))
-                    .sqrt()
-                    .clamp(0.0, 0.999);
+            let ir = (pixel_color.x() / (SAMPLES_PER_PIXEL as f64)).sqrt();
+            let ig = (pixel_color.y() / (SAMPLES_PER_PIXEL as f64)).sqrt();
+            let ib = (pixel_color.z() / (SAMPLES_PER_PIXEL as f64)).sqrt();
 
             target[[0, j, i]] = ir;
             target[[1, j, i]] = ig;
@@ -240,6 +237,9 @@ pub fn generate_render(n: usize, world: World) -> (Features, Target) {
             features[[14, j, i]] = pixel_info.sphere_y;
             features[[15, j, i]] = pixel_info.sphere_z;
             features[[16, j, i]] = pixel_info.sphere_r;
+            features[[17, j, i]] = pixel_info.color_x;
+            features[[18, j, i]] = pixel_info.color_y;
+            features[[19, j, i]] = pixel_info.color_z;
         }
     }
 
@@ -253,7 +253,7 @@ fn sphere_world(_: Python<'_>, m: &PyModule) -> PyResult<()> {
         Seed::set_seed(seed);
 
         let scene = random_scene();
-        let (features, target) = generate_render(64, scene);
+        let (features, target) = generate_render(128, scene);
 
         PyTuple::new(py, &[features.to_pyarray(py), target.to_pyarray(py)])
     }
