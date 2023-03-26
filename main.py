@@ -6,15 +6,19 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
 IMAGE_COUNT = 10_000
-TEST_THRESHOLD = 0.2
+TRAIN_PARTITION = 0.8
+
+TRAIN_COUNT = int(IMAGE_COUNT * TRAIN_PARTITION)
+TEST_COUNT = int(IMAGE_COUNT * (1 - TRAIN_PARTITION))
+
 
 class Images(Dataset):
-    def __init__(self, *, testing = False):
+    def __init__(self, *, testing=False):
         self.testing = testing
 
     def __getitem__(self, index):
         if self.testing:
-            index += int(IMAGE_COUNT * (1 - TEST_THRESHOLD))
+            index += TRAIN_COUNT
         features, target = random_scene_render(index)
         return (
             torch.tensor(features, dtype=torch.float),
@@ -23,9 +27,9 @@ class Images(Dataset):
 
     def __len__(self):
         if self.testing:
-            return int(IMAGE_COUNT * TEST_THRESHOLD)
+            return TEST_COUNT
         else:
-            return int(IMAGE_COUNT * (1 - TEST_THRESHOLD))
+            return TRAIN_COUNT
 
 
 class Raycaster(nn.Module):
