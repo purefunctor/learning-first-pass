@@ -5,7 +5,7 @@ from sphere_world import random_scene_render
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
-IMAGE_COUNT = 1_000
+IMAGE_COUNT = 10_000
 TEST_THRESHOLD = 0.2
 
 class Images(Dataset):
@@ -13,6 +13,8 @@ class Images(Dataset):
         self.testing = testing
 
     def __getitem__(self, index):
+        if self.testing:
+            index += int(IMAGE_COUNT * (1 - TEST_THRESHOLD))
         features, target = random_scene_render(index)
         return (
             torch.tensor(features, dtype=torch.float),
