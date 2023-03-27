@@ -1,7 +1,10 @@
+import math
 from pathlib import Path
+from matplotlib import pyplot as plt
 import torch
 
-from sphere_world import random_scene_render
+from lru import LRU
+from sphere_world import SphereWorld
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
@@ -9,6 +12,13 @@ from torch.utils.data import Dataset, DataLoader
 TRAIN_COUNT = 8_000
 TEST_COUNT = 2_000
 TOTAL_COUNT = TRAIN_COUNT + TEST_COUNT
+
+IMAGE_SIZE = 32
+BATCH_SIZE = 100
+ANGLE_COUNT = 10
+WORLD_CACHE = LRU(math.floor(BATCH_SIZE / ANGLE_COUNT))
+
+device = "mps" if torch.backends.mps.is_available() else "cpu"
 
 
 class Images(Dataset):
@@ -18,9 +28,19 @@ class Images(Dataset):
 
     def __getitem__(self, index):
         index += TOTAL_COUNT * self.epoch
+
         if self.testing:
             index += TRAIN_COUNT
-        features, target = random_scene_render(index)
+
+        index, angle = divmod(index, ANGLE_COUNT)
+
+        if index not in WORLD_CACHE:
+            WORLD_CACHE[index] = SphereWorld(
+                seed=index, angles=ANGLE_COUNT, size=IMAGE_SIZE
+            )
+
+        features, target = WORLD_CACHE[index].render(angle=angle)
+
         return (
             torch.tensor(features, dtype=torch.float),
             torch.tensor(target, dtype=torch.float),
@@ -116,8 +136,8 @@ if __name__ == "__main__":
         training_data = Images(epoch=epoch, testing=False)
         test_data = Images(epoch=epoch, testing=True)
 
-        training_dataloader = DataLoader(training_data, batch_size=100)
-        test_dataloader = DataLoader(test_data, batch_size=100)
+        training_dataloader = DataLoader(training_data, batch_size=BATCH_SIZE)
+        test_dataloader = DataLoader(test_data, batch_size=BATCH_SIZE)
 
         raycaster.train()
         train(training_dataloader, raycaster, loss_fn, optimizer)
