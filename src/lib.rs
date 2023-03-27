@@ -23,8 +23,8 @@ mod world;
 pub fn random_scene() -> World {
     let mut scene = Vec::new();
 
-    for a in -3..3 {
-        for b in -3..3 {
+    for a in -11..11 {
+        for b in -11..11 {
             let random_material: f64 = Seed::gen();
 
             let origin = Point3::new(
@@ -167,7 +167,7 @@ pub fn generate_render(n: usize, world: World) -> (Features, Target) {
     const SAMPLES_PER_PIXEL: usize = 50;
 
     let aspect_ratio = 1.0;
-    let look_from = Point3::new(13.0, 2.0, 3.0);
+    let look_from = Point3::new(13.0, 10.0, 3.0);
     let look_at = Point3::new(0.0, 0.0, 0.0);
     let v_up = Vec3::new(0.0, 1.0, 0.0);
     let distance_to_focus = 10.0;
@@ -253,7 +253,7 @@ fn sphere_world(_: Python<'_>, m: &PyModule) -> PyResult<()> {
         Seed::set_seed(seed);
 
         let scene = random_scene();
-        let (features, target) = generate_render(128, scene);
+        let (features, target) = generate_render(64, scene);
 
         PyTuple::new(py, &[features.to_pyarray(py), target.to_pyarray(py)])
     }

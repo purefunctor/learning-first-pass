@@ -5,18 +5,19 @@ from sphere_world import random_scene_render
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
-IMAGE_COUNT = 10_000
-TRAIN_PARTITION = 0.8
 
-TRAIN_COUNT = int(IMAGE_COUNT * TRAIN_PARTITION)
-TEST_COUNT = int(IMAGE_COUNT * (1 - TRAIN_PARTITION))
+TRAIN_COUNT = 8_000
+TEST_COUNT = 2_000
+TOTAL_COUNT = TRAIN_COUNT + TEST_COUNT
 
 
 class Images(Dataset):
-    def __init__(self, *, testing=False):
+    def __init__(self, *, epoch=0, testing=False):
+        self.epoch = epoch
         self.testing = testing
 
     def __getitem__(self, index):
+        index += TOTAL_COUNT * self.epoch
         if self.testing:
             index += TRAIN_COUNT
         features, target = random_scene_render(index)
@@ -44,7 +45,6 @@ class Raycaster(nn.Module):
             nn.ReLU(),
             nn.Conv2d(in_channels=64, out_channels=3, kernel_size=3, padding="same"),
             nn.BatchNorm2d(3),
-            nn.ReLU(),
             nn.Sigmoid(),
         )
 
@@ -76,7 +76,7 @@ def test(dataloader, model, loss_fn):
             pred = model(X)
             loss += loss_fn(pred, y).item()
             current = (batch + 1) * len(X)
-            print(f"Loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+            print(f"Total Loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
     loss /= len(dataloader)
     print(f"Test Error: \n Average Loss: {loss:>7f} \n")
 
@@ -88,12 +88,6 @@ if __name__ == "__main__":
         device = "cpu"
 
     print(f"Using Device: {device}")
-
-    training_data = Images(testing=False)
-    test_data = Images(testing=True)
-
-    training_dataloader = DataLoader(training_data, batch_size=100)
-    test_dataloader = DataLoader(test_data, batch_size=100)
 
     raycaster = Raycaster().to(device)
     loss_fn = nn.MSELoss()
@@ -118,6 +112,12 @@ if __name__ == "__main__":
 
     for epoch in range(epochs, epochs + 10):
         print(f"Epoch {epoch}")
+
+        training_data = Images(epoch=epoch, testing=False)
+        test_data = Images(epoch=epoch, testing=True)
+
+        training_dataloader = DataLoader(training_data, batch_size=100)
+        test_dataloader = DataLoader(test_data, batch_size=100)
 
         raycaster.train()
         train(training_dataloader, raycaster, loss_fn, optimizer)
