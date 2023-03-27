@@ -7,8 +7,8 @@ use pyo3::{
     types::{PyModule, PyTuple},
     PyResult, Python,
 };
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use ray::Ray;
-use seed::Seed;
 use vec3::{Color, Point3, Vec3};
 use world::{Object, ObjectKind, World};
 
@@ -16,37 +16,36 @@ mod camera;
 mod hit;
 mod material;
 mod ray;
-mod seed;
 mod vec3;
 mod world;
 
-pub fn random_scene() -> World {
+pub fn random_scene(rng: &mut StdRng) -> World {
     let mut scene = Vec::new();
 
     for a in -11..11 {
         for b in -11..11 {
-            let random_material: f64 = Seed::gen();
+            let random_material: f64 = rng.gen();
 
             let origin = Point3::new(
-                (a as f64) + Seed::gen_range(0.0..0.9),
+                (a as f64) + rng.gen_range(0.0..0.9),
                 0.2,
-                (b as f64) + Seed::gen_range(0.0..0.9),
+                (b as f64) + rng.gen_range(0.0..0.9),
             );
 
-            let radius: f64 = Seed::gen_range(0.49..0.5);
+            let radius: f64 = rng.gen_range(0.49..0.5);
 
             let kind = ObjectKind::Sphere { origin, radius };
 
             if random_material < 0.50 {
                 let material = Material::Lambertian {
-                    albedo: Color::random(0.0..1.0) * Color::random(0.0..1.0),
+                    albedo: Color::random(rng, 0.0..1.0) * Color::random(rng, 0.0..1.0),
                 };
                 let object = Object { kind, material };
                 scene.push(object);
             } else if random_material < 0.75 {
                 let material = Material::Metal {
-                    albedo: Color::random(0.4..1.0),
-                    fuzz: Seed::gen_range(0.0..0.5),
+                    albedo: Color::random(rng, 0.4..1.0),
+                    fuzz: rng.gen_range(0.0..0.5),
                 };
                 let object = Object { kind, material };
                 scene.push(object)
@@ -63,9 +62,9 @@ pub fn random_scene() -> World {
     World(scene)
 }
 
-pub fn ray_info(ray: &Ray, world: &World) -> (Info, Color) {
+pub fn ray_info(rng: &mut StdRng, ray: &Ray, world: &World) -> (Info, Color) {
     if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
-        if let Some((attenuation, _)) = hit.object.material.scatter(ray, &hit) {
+        if let Some((attenuation, _)) = hit.object.material.scatter(rng, ray, &hit) {
             (Info::from_object(hit.object), attenuation)
         } else {
             (Info::from_nothing(), Color::new(0.0, 0.0, 0.0))
@@ -163,7 +162,7 @@ type Features = Array3<f64>;
 
 type Target = Array3<f64>;
 
-pub fn generate_render(n: usize, world: World) -> (Features, Target) {
+pub fn generate_render(rng: &mut StdRng, n: usize, world: World) -> (Features, Target) {
     const SAMPLES_PER_PIXEL: usize = 50;
 
     let aspect_ratio = 1.0;
@@ -197,19 +196,19 @@ pub fn generate_render(n: usize, world: World) -> (Features, Target) {
             let u = i as f64 / (width - 1) as f64;
             let v = j as f64 / (height - 1) as f64;
 
-            let ray = camera.ray(u, v);
-            let (pixel_info, mut pixel_color) = ray_info(&ray, &world);
+            let ray = camera.ray(rng, u, v);
+            let (pixel_info, mut pixel_color) = ray_info(rng, &ray, &world);
 
             // whilst subsequent rays do
             for _ in 0..SAMPLES_PER_PIXEL - 1 {
-                let random_u: f64 = Seed::gen();
-                let random_v: f64 = Seed::gen();
+                let random_u: f64 = rng.gen();
+                let random_v: f64 = rng.gen();
 
                 let u = (i as f64 + random_u) / (width - 1) as f64;
                 let v = (j as f64 + random_v) / (height - 1) as f64;
 
-                let ray = camera.ray(u, v);
-                pixel_color += ray_info(&ray, &world).1;
+                let ray = camera.ray(rng, u, v);
+                pixel_color += ray_info(rng, &ray, &world).1;
             }
 
             let ir = (pixel_color.x() / (SAMPLES_PER_PIXEL as f64)).sqrt();
@@ -250,10 +249,10 @@ pub fn generate_render(n: usize, world: World) -> (Features, Target) {
 fn sphere_world(_: Python<'_>, m: &PyModule) -> PyResult<()> {
     #[pyfn(m)]
     fn random_scene_render(py: Python<'_>, seed: u64) -> &PyTuple {
-        Seed::set_seed(seed);
+        let mut rng = StdRng::seed_from_u64(seed);
 
-        let scene = random_scene();
-        let (features, target) = generate_render(64, scene);
+        let scene = random_scene(&mut rng);
+        let (features, target) = generate_render(&mut rng, 64, scene);
 
         PyTuple::new(py, &[features.to_pyarray(py), target.to_pyarray(py)])
     }

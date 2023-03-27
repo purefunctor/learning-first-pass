@@ -1,7 +1,8 @@
+use rand::{rngs::StdRng, Rng};
+
 use crate::{
     hit::Hit,
     ray::Ray,
-    seed::Seed,
     vec3::{Color, Vec3},
 };
 
@@ -13,10 +14,11 @@ pub enum Material {
 }
 
 impl Material {
-    pub fn scatter(&self, ray: &Ray, hit: &Hit) -> Option<(Color, Ray)> {
+    pub fn scatter(&self, rng: &mut StdRng, ray: &Ray, hit: &Hit) -> Option<(Color, Ray)> {
         match self {
             Material::Lambertian { albedo } => {
-                let mut scatter_direction = hit.normal + Vec3::random_in_unit_sphere().normalized();
+                let mut scatter_direction =
+                    hit.normal + Vec3::random_in_unit_sphere(rng).normalized();
                 if scatter_direction.near_zero() {
                     scatter_direction = hit.normal;
                 }
@@ -25,8 +27,10 @@ impl Material {
             }
             Material::Metal { albedo, fuzz } => {
                 let reflected = ray.direction.reflect(hit.normal).normalized();
-                let scattered =
-                    Ray::new(hit.point, reflected + *fuzz * Vec3::random_in_unit_sphere());
+                let scattered = Ray::new(
+                    hit.point,
+                    reflected + *fuzz * Vec3::random_in_unit_sphere(rng),
+                );
 
                 if scattered.direction.dot(hit.normal) > 0.0 {
                     Some((*albedo, scattered))
@@ -49,7 +53,7 @@ impl Material {
 
                 let cannot_refract = refraction_ratio * sin_theta > 1.0;
                 let will_reflect =
-                    Seed::gen() < dielectric_reflectance(cos_theta, refraction_ratio);
+                    rng.gen::<f64>() < dielectric_reflectance(cos_theta, refraction_ratio);
 
                 let direction = if cannot_refract || will_reflect {
                     unit_direction.reflect(hit.normal)

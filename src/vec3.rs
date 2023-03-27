@@ -3,7 +3,7 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Range, Sub, SubAssign},
 };
 
-use crate::seed::Seed;
+use rand::{rngs::StdRng, Rng};
 
 #[derive(Clone, Copy)]
 pub struct Vec3 {
@@ -78,27 +78,27 @@ impl Vec3 {
         format!("{} {} {}", ir, ig, ib)
     }
 
-    pub fn random(r: Range<f64>) -> Self {
+    pub fn random(rng: &mut StdRng, r: Range<f64>) -> Self {
         Self {
             e: [
-                Seed::gen_range(r.clone()),
-                Seed::gen_range(r.clone()),
-                Seed::gen_range(r),
+                rng.gen_range(r.clone()),
+                rng.gen_range(r.clone()),
+                rng.gen_range(r),
             ],
         }
     }
 
-    pub fn random_in_unit_sphere() -> Self {
+    pub fn random_in_unit_sphere(rng: &mut StdRng) -> Self {
         loop {
-            let v = Vec3::random(-1.0..1.0);
+            let v = Vec3::random(rng, -1.0..1.0);
             if v.length_squared() < 1.0 {
                 return v;
             }
         }
     }
 
-    pub fn random_in_hemisphere(normal: Vec3) -> Vec3 {
-        let in_unit_sphere = Self::random_in_unit_sphere();
+    pub fn random_in_hemisphere(rng: &mut StdRng, normal: Vec3) -> Vec3 {
+        let in_unit_sphere = Self::random_in_unit_sphere(rng);
         if in_unit_sphere.dot(normal) > 0.0 {
             in_unit_sphere
         } else {
@@ -122,9 +122,9 @@ impl Vec3 {
         r_out_perp + r_out_parallel
     }
 
-    pub fn random_in_unit_disk() -> Vec3 {
+    pub fn random_in_unit_disk(rng: &mut StdRng) -> Vec3 {
         loop {
-            let p = Vec3::new(Seed::gen_range(-1.0..1.0), Seed::gen_range(-1.0..1.0), 0.0);
+            let p = Vec3::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0), 0.0);
             if p.length_squared() < 1.0 {
                 return p;
             }
