@@ -9,11 +9,11 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
 
-TRAIN_COUNT = 8_000
-TEST_COUNT = 2_000
+TRAIN_COUNT = 800
+TEST_COUNT = 200
 TOTAL_COUNT = TRAIN_COUNT + TEST_COUNT
 
-IMAGE_SIZE = 32
+IMAGE_SIZE = 64
 BATCH_SIZE = 100
 ANGLE_COUNT = 10
 WORLD_CACHE = LRU(math.floor(BATCH_SIZE / ANGLE_COUNT))
