@@ -1,7 +1,7 @@
-use std::{num::NonZeroUsize, ops::Index};
+use std::ops::Index;
 
 use camera::Camera;
-use lru::LruCache;
+use itertools::iproduct;
 use material::Material;
 use ndarray::{Array3, Array4};
 use numpy::ToPyArray;
@@ -26,8 +26,8 @@ mod world;
 pub fn random_scene(rng: &mut StdRng) -> World {
     let mut scene = Vec::new();
 
-    for a in -11..=11 {
-        for b in -11..=11 {
+    for a in -2..=2 {
+        for b in -2..=2 {
             let random_material: f64 = rng.gen();
 
             let origin = Point3::new(
@@ -107,13 +107,6 @@ pub struct Info {
 }
 
 impl Info {
-    fn from_nothing() -> Self {
-        Self {
-            is_nothing: 1.0,
-            ..Default::default()
-        }
-    }
-
     fn from_object(look_from: Point3, object: &Object) -> Self {
         let mut info = Self {
             camera_x: look_from.x(),
@@ -302,31 +295,25 @@ impl SphereWorld {
         let d_m = x_d.max(y_d).max(z_d);
 
         let dx = (x_d + d_m - x_d) / w as f64;
-        // let dy = (y_d + d_m - y_d) / h as f64;
-        let dy = (max_bounds.y() - min_bounds.y()) / h as f64;
+        let dy = (y_d + d_m - y_d) / h as f64;
+        // let dy = (max_bounds.y() - min_bounds.y()) / h as f64;
         let dz = (z_d + d_m - z_d) / d as f64;
 
-        let mut point_cache: LruCache<(usize, usize, usize, usize), Info> =
-            LruCache::new(NonZeroUsize::new(d * h * w).unwrap());
-
-        for ((i, j, k, l), v) in volume.indexed_iter_mut() {
+        for (l, k, j) in iproduct!(0..w, 0..h, 0..d) {
             let point = Vec3::new(
                 min_bounds.x() + (l as f64 * dx),
                 min_bounds.y() + (k as f64 * dy),
                 min_bounds.z() + (j as f64 * dz),
             );
-            for (index, object) in self.scene.0.iter().enumerate() {
-                if let Some(info) = point_cache.get(&(j, k, l, index)) {
-                    *v = info[i];
-                    continue;
-                }
-                let info = if inside_object(point, object) {
-                    Info::from_object(look_from, object)
+            for object in self.scene.0.iter() {
+                if inside_object(point, object) {
+                    let info = Info::from_object(look_from, object);
+                    for i in 0..CHANNELS {
+                        volume[[i, j, k, l]] = info[i];
+                    }
                 } else {
-                    Info::from_nothing()
-                };
-                *v = info[i];
-                point_cache.push((j, k, l, index), info);
+                    volume[[3, j, k, l]] = 1.0;
+                }
             }
         }
 
