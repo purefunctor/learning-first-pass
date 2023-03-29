@@ -1,26 +1,16 @@
 from matplotlib import pyplot as plt
+from mpl_toolkits.axes_grid1 import ImageGrid
 from sphere_world import SphereWorld
 
-world = SphereWorld(seed=0, angles=4, size=1024)
+world = SphereWorld(seed=0, angles=9, size=64)
 
 figure = plt.figure()
 
-features0, image0 = world.render(angle=0)
-features1, image1 = world.render(angle=2)
+grid = ImageGrid(figure, 111, nrows_ncols=(3, 3), axes_pad=0.1)
 
-print(f"Got features of shape {features0.shape}, {features1.shape}")
-print(f"Got target of shape {image0.shape}, {image1.shape}")
-
-ax = figure.add_subplot(1, 2, 1)
-
-ax.imshow(image0.transpose((1, 2, 0)))
-ax.invert_yaxis()
-ax.set_title("Scene (Render)")
-
-ax = figure.add_subplot(1, 2, 2)
-
-ax.imshow(image1.transpose((1, 2, 0)))
-ax.invert_yaxis()
-ax.set_title("Scene (Render)")
+for i, ax in enumerate(grid):
+    _, image = world.render(angle=i)
+    ax.imshow(image.transpose((1, 2, 0)))
+    ax.invert_yaxis()
 
 plt.show()

@@ -78,7 +78,7 @@ pub fn ray_info(rng: &mut StdRng, ray: &Ray, world: &World) -> (Info, Color) {
     }
 }
 
-const CHANNELS: usize = 20;
+const CHANNELS: usize = 23;
 
 #[derive(Default)]
 pub struct Info {
@@ -257,6 +257,9 @@ impl SphereWorld {
                 features[[17, j, i]] = pixel_info.color_x;
                 features[[18, j, i]] = pixel_info.color_y;
                 features[[19, j, i]] = pixel_info.color_z;
+                features[[20, j, i]] = look_from.x();
+                features[[21, j, i]] = look_from.y();
+                features[[22, j, i]] = look_from.z();
             }
         }
 

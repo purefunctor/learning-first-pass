@@ -57,7 +57,7 @@ class Raycaster(nn.Module):
     def __init__(self):
         super().__init__()
         self.sequence = nn.Sequential(
-            nn.Conv2d(in_channels=20, out_channels=128, kernel_size=3, padding="same"),
+            nn.Conv2d(in_channels=23, out_channels=128, kernel_size=3, padding="same"),
             nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, padding="same"),
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     raycaster.load_state_dict(checkpoint["model_state"])
     optimizer.load_state_dict(checkpoint["optimizer_state"])
 
-    for epoch in range(epochs, epochs + 10):
+    for epoch in range(epochs, epochs + 5):
         print(f"Epoch {epoch}")
 
         training_data = Images(epoch=epoch, testing=False)
@@ -149,7 +149,7 @@ if __name__ == "__main__":
 
     torch.save(
         {
-            "epochs": epochs + 10,
+            "epochs": epochs + 5,
             "model_state": raycaster.state_dict(),
             "optimizer_state": optimizer.state_dict(),
         },
