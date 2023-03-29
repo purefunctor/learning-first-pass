@@ -1,12 +1,15 @@
+use std::{num::NonZeroUsize, ops::Index};
+
 use camera::Camera;
+use lru::LruCache;
 use material::Material;
-use ndarray::Array3;
+use ndarray::{Array3, Array4};
 use numpy::ToPyArray;
 use pyo3::{
     exceptions::PyValueError,
     pyclass, pymethods, pymodule,
     types::{PyModule, PyTuple},
-    PyResult, Python,
+    PyResult, Python, ToPyObject,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use ray::Ray;
@@ -23,8 +26,8 @@ mod world;
 pub fn random_scene(rng: &mut StdRng) -> World {
     let mut scene = Vec::new();
 
-    for a in -11..11 {
-        for b in -11..11 {
+    for a in -11..=11 {
+        for b in -11..=11 {
             let random_material: f64 = rng.gen();
 
             let origin = Point3::new(
@@ -37,13 +40,13 @@ pub fn random_scene(rng: &mut StdRng) -> World {
 
             let kind = ObjectKind::Sphere { origin, radius };
 
-            if random_material < 0.50 {
+            if random_material < 0.80 {
                 let material = Material::Lambertian {
                     albedo: Color::random(rng, 0.0..1.0) * Color::random(rng, 0.0..1.0),
                 };
                 let object = Object { kind, material };
                 scene.push(object);
-            } else if random_material < 0.75 {
+            } else if random_material < 0.90 {
                 let material = Material::Metal {
                     albedo: Color::random(rng, 0.4..1.0),
                     fuzz: rng.gen_range(0.0..0.5),
@@ -63,22 +66,22 @@ pub fn random_scene(rng: &mut StdRng) -> World {
     World(scene)
 }
 
-pub fn ray_info(rng: &mut StdRng, ray: &Ray, world: &World) -> (Info, Color) {
+pub fn ray_color(rng: &mut StdRng, ray: &Ray, world: &World) -> Color {
     if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
         if let Some((attenuation, _)) = hit.object.material.scatter(rng, ray, &hit) {
-            (Info::from_object(hit.object), attenuation)
+            attenuation
         } else {
-            (Info::from_nothing(), Color::new(0.0, 0.0, 0.0))
+            Color::new(0.0, 0.0, 0.0)
         }
     } else {
         let unit_direction = ray.direction.normalized();
         let t = 0.5 * (unit_direction.y() + 1.0);
         let color = (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
-        (Info::from_sky(color), color)
+        color
     }
 }
 
-const CHANNELS: usize = 23;
+const CHANNELS: usize = 19;
 
 #[derive(Default)]
 pub struct Info {
@@ -86,7 +89,6 @@ pub struct Info {
     is_metal: f64,
     is_dielectric: f64,
     is_nothing: f64,
-    is_sky: f64,
     lr: f64,
     lg: f64,
     lb: f64,
@@ -99,9 +101,9 @@ pub struct Info {
     sphere_y: f64,
     sphere_z: f64,
     sphere_r: f64,
-    color_x: f64,
-    color_y: f64,
-    color_z: f64,
+    camera_x: f64,
+    camera_y: f64,
+    camera_z: f64,
 }
 
 impl Info {
@@ -112,18 +114,13 @@ impl Info {
         }
     }
 
-    fn from_sky(color: Color) -> Self {
-        Self {
-            is_sky: 1.0,
-            color_x: color.x(),
-            color_y: color.y(),
-            color_z: color.z(),
+    fn from_object(look_from: Point3, object: &Object) -> Self {
+        let mut info = Self {
+            camera_x: look_from.x(),
+            camera_y: look_from.y(),
+            camera_z: look_from.z(),
             ..Default::default()
-        }
-    }
-
-    fn from_object(object: Object) -> Self {
-        let mut info = Self::default();
+        };
 
         match object.kind {
             ObjectKind::Sphere { origin, radius } => {
@@ -159,7 +156,36 @@ impl Info {
     }
 }
 
-type Features = Array3<f64>;
+impl Index<usize> for Info {
+    type Output = f64;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        match index {
+            0 => &self.is_lambertian,
+            1 => &self.is_metal,
+            2 => &self.is_dielectric,
+            3 => &self.is_nothing,
+            4 => &self.lr,
+            5 => &self.lg,
+            6 => &self.lb,
+            7 => &self.mr,
+            8 => &self.mg,
+            9 => &self.mb,
+            10 => &self.mf,
+            11 => &self.di,
+            12 => &self.sphere_x,
+            13 => &self.sphere_y,
+            14 => &self.sphere_z,
+            15 => &self.sphere_r,
+            16 => &self.camera_x,
+            17 => &self.camera_y,
+            18 => &self.camera_z,
+            _ => panic!("Invalid index."),
+        }
+    }
+}
+
+type Volume = Array4<f64>;
 
 type Target = Array3<f64>;
 
@@ -172,19 +198,10 @@ struct SphereWorld {
 }
 
 impl SphereWorld {
-    fn render_impl(&mut self, angle: u64) -> (Features, Target) {
+    fn render_impl(&mut self, look_from: Point3) -> Target {
         const SAMPLES_PER_PIXEL: usize = 50;
 
         let aspect_ratio = 1.0;
-
-        let look_from = {
-            let radius = 10.0;
-            let angle_radians = angle as f64 * 2.0 * std::f64::consts::PI / self.angles as f64;
-            let x = radius * angle_radians.cos();
-            let z = radius * angle_radians.sin();
-            Point3::new(x, 10.0, z)
-        };
-
         let look_at = Point3::new(0.0, 0.0, 0.0);
         let v_up = Vec3::new(0.0, 1.0, 0.0);
         let distance_to_focus = 10.0;
@@ -205,7 +222,6 @@ impl SphereWorld {
         let width = self.size as usize;
         let height = self.size as usize;
 
-        let mut features = Features::zeros([CHANNELS, height, width]);
         let mut target = Target::zeros([3, height, width]);
 
         for j in 0..height {
@@ -215,7 +231,7 @@ impl SphereWorld {
                 let v = j as f64 / (height - 1) as f64;
 
                 let ray = camera.ray(&mut self.rng, u, v);
-                let (pixel_info, mut pixel_color) = ray_info(&mut self.rng, &ray, &self.scene);
+                let mut pixel_color = ray_color(&mut self.rng, &ray, &self.scene);
 
                 // whilst subsequent rays do
                 for _ in 0..SAMPLES_PER_PIXEL - 1 {
@@ -226,7 +242,7 @@ impl SphereWorld {
                     let v = (j as f64 + random_v) / (height - 1) as f64;
 
                     let ray = camera.ray(&mut self.rng, u, v);
-                    pixel_color += ray_info(&mut self.rng, &ray, &self.scene).1;
+                    pixel_color += ray_color(&mut self.rng, &ray, &self.scene);
                 }
 
                 let ir = (pixel_color.x() / (SAMPLES_PER_PIXEL as f64)).sqrt();
@@ -236,34 +252,96 @@ impl SphereWorld {
                 target[[0, j, i]] = ir;
                 target[[1, j, i]] = ig;
                 target[[2, j, i]] = ib;
-
-                features[[0, j, i]] = pixel_info.is_lambertian;
-                features[[1, j, i]] = pixel_info.is_metal;
-                features[[2, j, i]] = pixel_info.is_dielectric;
-                features[[3, j, i]] = pixel_info.is_nothing;
-                features[[4, j, i]] = pixel_info.is_sky;
-                features[[5, j, i]] = pixel_info.lr;
-                features[[6, j, i]] = pixel_info.lg;
-                features[[7, j, i]] = pixel_info.lb;
-                features[[8, j, i]] = pixel_info.mr;
-                features[[9, j, i]] = pixel_info.mg;
-                features[[10, j, i]] = pixel_info.mb;
-                features[[11, j, i]] = pixel_info.mf;
-                features[[12, j, i]] = pixel_info.di;
-                features[[13, j, i]] = pixel_info.sphere_x;
-                features[[14, j, i]] = pixel_info.sphere_y;
-                features[[15, j, i]] = pixel_info.sphere_z;
-                features[[16, j, i]] = pixel_info.sphere_r;
-                features[[17, j, i]] = pixel_info.color_x;
-                features[[18, j, i]] = pixel_info.color_y;
-                features[[19, j, i]] = pixel_info.color_z;
-                features[[20, j, i]] = look_from.x();
-                features[[21, j, i]] = look_from.y();
-                features[[22, j, i]] = look_from.z();
             }
         }
 
-        (features, target)
+        target
+    }
+
+    fn compute_bounds(&self) -> (Vec3, Vec3) {
+        let mut min_bounds = vec![f64::INFINITY, f64::INFINITY, f64::INFINITY];
+        let mut max_bounds = vec![f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+
+        for object in self.scene.0.iter() {
+            match object.kind {
+                ObjectKind::Sphere { origin, radius } => {
+                    let (x, y, z) = origin.as_tuple();
+
+                    let min_coords = vec![x - radius, y - radius, z - radius];
+
+                    let max_coords = vec![x + radius, y + radius, z + radius];
+
+                    for i in 0..3 {
+                        min_bounds[i] = min_bounds[i].min(min_coords[i]);
+                        max_bounds[i] = max_bounds[i].max(max_coords[i]);
+                    }
+                }
+            }
+        }
+
+        assert!(min_bounds < max_bounds);
+
+        (
+            Vec3::new(min_bounds[0], min_bounds[1], min_bounds[2]),
+            Vec3::new(max_bounds[0], max_bounds[1], max_bounds[2]),
+        )
+    }
+
+    fn generate_volume_impl(&self, look_from: Point3) -> Volume {
+        let (min_bounds, max_bounds) = self.compute_bounds();
+
+        let w = self.size as usize;
+        let h = self.size as usize;
+        let d = self.size as usize;
+
+        let mut volume = Array4::zeros((CHANNELS, d, h, w));
+
+        let x_d = max_bounds.x() - min_bounds.x();
+        let y_d = max_bounds.y() - min_bounds.y();
+        let z_d = max_bounds.z() - min_bounds.z();
+        let d_m = x_d.max(y_d).max(z_d);
+
+        let dx = (x_d + d_m - x_d) / w as f64;
+        // let dy = (y_d + d_m - y_d) / h as f64;
+        let dy = (max_bounds.y() - min_bounds.y()) / h as f64;
+        let dz = (z_d + d_m - z_d) / d as f64;
+
+        let mut point_cache: LruCache<(usize, usize, usize, usize), Info> =
+            LruCache::new(NonZeroUsize::new(d * h * w).unwrap());
+
+        for ((i, j, k, l), v) in volume.indexed_iter_mut() {
+            let point = Vec3::new(
+                min_bounds.x() + (l as f64 * dx),
+                min_bounds.y() + (k as f64 * dy),
+                min_bounds.z() + (j as f64 * dz),
+            );
+            for (index, object) in self.scene.0.iter().enumerate() {
+                if let Some(info) = point_cache.get(&(j, k, l, index)) {
+                    *v = info[i];
+                    continue;
+                }
+                let info = if inside_object(point, object) {
+                    Info::from_object(look_from, object)
+                } else {
+                    Info::from_nothing()
+                };
+                *v = info[i];
+                point_cache.push((j, k, l, index), info);
+            }
+        }
+
+        volume
+    }
+}
+
+fn inside_object(point: Vec3, object: &Object) -> bool {
+    match object.kind {
+        ObjectKind::Sphere { origin, radius } => {
+            let distance = (point.x() - origin.x()).powi(2)
+                + (point.y() - origin.y()).powi(2)
+                + (point.z() - origin.z()).powi(2);
+            distance <= radius.powi(2)
+        }
     }
 }
 
@@ -290,10 +368,24 @@ impl SphereWorld {
                 self.angles - 1
             )));
         }
-        let (features, target) = self.render_impl(angle);
+
+        let look_from = {
+            let radius = 10.0;
+            let angle_radians = angle as f64 * 2.0 * std::f64::consts::PI / self.angles as f64;
+            let x = radius * angle_radians.cos();
+            let z = radius * angle_radians.sin();
+            Point3::new(x, 10.0, z)
+        };
+
+        let target = self.render_impl(look_from);
+        let volume = self.generate_volume_impl(look_from);
+
         Ok(PyTuple::new(
             py,
-            &[features.to_pyarray(py), target.to_pyarray(py)],
+            &[
+                volume.to_pyarray(py).to_object(py),
+                target.to_pyarray(py).to_object(py),
+            ],
         ))
     }
 }
