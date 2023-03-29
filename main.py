@@ -9,14 +9,14 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
 
-TRAIN_COUNT = 800
-TEST_COUNT = 200
+TRAIN_COUNT = 80
+TEST_COUNT = 20
 TOTAL_COUNT = TRAIN_COUNT + TEST_COUNT
 
-IMAGE_SIZE = 64
-BATCH_SIZE = 100
-ANGLE_COUNT = 10
-WORLD_CACHE = LRU(math.floor(BATCH_SIZE / ANGLE_COUNT))
+IMAGE_SIZE = 32
+BATCH_SIZE = 5
+ANGLE_COUNT = 5
+WORLD_CACHE = LRU(1)
 
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 
@@ -56,20 +56,57 @@ class Images(Dataset):
 class Raycaster(nn.Module):
     def __init__(self):
         super().__init__()
-        self.sequence = nn.Sequential(
-            nn.Conv2d(in_channels=23, out_channels=128, kernel_size=3, padding="same"),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, padding="same"),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=64, out_channels=3, kernel_size=3, padding="same"),
-            nn.BatchNorm2d(3),
-            nn.Sigmoid(),
+
+        self.conv3d_0 = nn.Conv3d(
+            in_channels=19, out_channels=64, kernel_size=5, padding="same"
         )
+        self.batchNorm3d_0 = nn.BatchNorm3d(64)
+        self.maxpool_0 = nn.MaxPool3d(
+            kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1)
+        )
+        self.relu_0 = nn.ReLU()
+
+        self.conv3d_1 = nn.Conv3d(
+            in_channels=64, out_channels=32, kernel_size=5, padding="same"
+        )
+        self.batchNorm3d_1 = nn.BatchNorm3d(32)
+        self.maxpool_1 = nn.MaxPool3d(
+            kernel_size=(16, 1, 1), stride=(1, 1, 1)
+        )
+        self.relu_1 = nn.ReLU()
+
+        self.conv2d_2 = nn.Conv2d(in_channels=32, out_channels=16, kernel_size=3, padding="same")
+        self.batchNorm2d_2 = nn.BatchNorm2d(16)
+        self.relu_2 = nn.ReLU()
+
+        self.conv2d_3 = nn.Conv2d(in_channels=16, out_channels=3, kernel_size=3, padding="same")
+        self.batchNorm2d_3 = nn.BatchNorm2d(3)
+        self.relu_3 = nn.ReLU()
+
+        self.sigmoid_4 = nn.Sigmoid()
 
     def forward(self, x):
-        return self.sequence(x)
+        x = self.conv3d_0(x)
+        x = self.batchNorm3d_0(x)
+        x = self.maxpool_0(x)
+        x = self.relu_0(x)
+
+        x = self.conv3d_1(x)
+        x = self.batchNorm3d_1(x)
+        x = self.maxpool_1(x)
+        x = self.relu_1(x)
+
+        x = torch.sum(x, dim=2)
+
+        x = self.conv2d_2(x)
+        x = self.batchNorm2d_2(x)
+        x = self.relu_2(x)
+
+        x = self.conv2d_3(x)
+        x = self.batchNorm2d_3(x)
+        x = self.relu_3(x)
+
+        return self.sigmoid_4(x)
 
 
 def train(dataloader, model, loss_fn, optimizer):
@@ -102,10 +139,7 @@ def test(dataloader, model, loss_fn):
 
 
 if __name__ == "__main__":
-    if torch.backends.mps.is_available():
-        device = "mps"
-    else:
-        device = "cpu"
+    device = "cpu"
 
     print(f"Using Device: {device}")
 
