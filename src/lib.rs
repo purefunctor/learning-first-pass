@@ -1,4 +1,5 @@
 use camera::Camera;
+use hit::Hit;
 use material::Material;
 use ndarray::Array3;
 use numpy::ToPyArray;
@@ -66,7 +67,7 @@ pub fn random_scene(rng: &mut StdRng) -> World {
 pub fn ray_info(rng: &mut StdRng, ray: &Ray, world: &World) -> (Info, Color) {
     if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
         if let Some((attenuation, _)) = hit.object.material.scatter(rng, ray, &hit) {
-            (Info::from_object(hit.object), attenuation)
+            (Info::from_hit(hit, attenuation), attenuation)
         } else {
             (Info::from_nothing(), Color::new(0.0, 0.0, 0.0))
         }
@@ -99,9 +100,12 @@ pub struct Info {
     sphere_y: f64,
     sphere_z: f64,
     sphere_r: f64,
-    color_x: f64,
-    color_y: f64,
-    color_z: f64,
+    color_r: f64,
+    color_g: f64,
+    color_b: f64,
+    point_x: f64,
+    point_y: f64,
+    point_z: f64,
 }
 
 impl Info {
@@ -115,15 +119,25 @@ impl Info {
     fn from_sky(color: Color) -> Self {
         Self {
             is_sky: 1.0,
-            color_x: color.x(),
-            color_y: color.y(),
-            color_z: color.z(),
+            color_r: color.x(),
+            color_g: color.y(),
+            color_b: color.z(),
             ..Default::default()
         }
     }
 
-    fn from_object(object: Object) -> Self {
-        let mut info = Self::default();
+    fn from_hit(hit: Hit, color: Color) -> Self {
+        let object = hit.object;
+        let point = hit.point;
+        let mut info = Self {
+            color_r: color.x(),
+            color_g: color.y(),
+            color_b: color.z(),
+            point_x: point.x(),
+            point_y: point.y(),
+            point_z: point.z(),
+            ..Default::default()
+        };
 
         match object.kind {
             ObjectKind::Sphere { origin, radius } => {
@@ -254,12 +268,12 @@ impl SphereWorld {
                 features[[14, j, i]] = pixel_info.sphere_y;
                 features[[15, j, i]] = pixel_info.sphere_z;
                 features[[16, j, i]] = pixel_info.sphere_r;
-                features[[17, j, i]] = pixel_info.color_x;
-                features[[18, j, i]] = pixel_info.color_y;
-                features[[19, j, i]] = pixel_info.color_z;
-                features[[20, j, i]] = look_from.x();
-                features[[21, j, i]] = look_from.y();
-                features[[22, j, i]] = look_from.z();
+                features[[17, j, i]] = pixel_info.color_r;
+                features[[18, j, i]] = pixel_info.color_g;
+                features[[19, j, i]] = pixel_info.color_b;
+                features[[20, j, i]] = pixel_info.point_x;
+                features[[21, j, i]] = pixel_info.point_y;
+                features[[22, j, i]] = pixel_info.point_z;
             }
         }
 

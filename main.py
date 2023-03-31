@@ -2,6 +2,7 @@ import math
 from pathlib import Path
 from matplotlib import pyplot as plt
 import torch
+import wandb
 
 from lru import LRU
 from sphere_world import SphereWorld
@@ -99,6 +100,7 @@ def test(dataloader, model, loss_fn):
             print(f"Total Loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
     loss /= len(dataloader)
     print(f"Test Error: \n Average Loss: {loss:>7f} \n")
+    return loss
 
 
 if __name__ == "__main__":
@@ -130,7 +132,14 @@ if __name__ == "__main__":
     raycaster.load_state_dict(checkpoint["model_state"])
     optimizer.load_state_dict(checkpoint["optimizer_state"])
 
-    for epoch in range(epochs, epochs + 5):
+    wandb.init(
+        project="learning-first-pass",
+        config={
+            "epochs": 10,
+        },
+    )
+
+    for epoch in range(epochs, epochs + 10):
         print(f"Epoch {epoch}")
 
         training_data = Images(epoch=epoch, testing=False)
@@ -143,15 +152,19 @@ if __name__ == "__main__":
         train(training_dataloader, raycaster, loss_fn, optimizer)
 
         raycaster.eval()
-        test(test_dataloader, raycaster, loss_fn)
+        testing_loss = test(test_dataloader, raycaster, loss_fn)
+
+        wandb.log({ "testing_loss": testing_loss })
 
     print("Done!")
 
     torch.save(
         {
-            "epochs": epochs + 5,
+            "epochs": epochs + 10,
             "model_state": raycaster.state_dict(),
             "optimizer_state": optimizer.state_dict(),
         },
         "training_state.pth",
     )
+    
+    wandb.finish()
