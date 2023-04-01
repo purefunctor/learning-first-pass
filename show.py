@@ -2,7 +2,7 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import ImageGrid
 from sphere_world import SphereWorld
 
-world = SphereWorld(seed=0, angles=9, size=64)
+world = SphereWorld(seed=0, angles=9, size=32)
 
 figure = plt.figure()
 

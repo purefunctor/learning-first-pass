@@ -1,3 +1,4 @@
+from argparse import ArgumentParser
 import math
 from pathlib import Path
 from matplotlib import pyplot as plt
@@ -10,37 +11,37 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
 
-TRAIN_COUNT = 800
-TEST_COUNT = 200
+TRAIN_COUNT = 1000
+TEST_COUNT = 500
 TOTAL_COUNT = TRAIN_COUNT + TEST_COUNT
 
-IMAGE_SIZE = 64
+IMAGE_SIZE = 32
 BATCH_SIZE = 100
-ANGLE_COUNT = 10
-WORLD_CACHE = LRU(math.floor(BATCH_SIZE / ANGLE_COUNT))
 
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 
 
 class Images(Dataset):
-    def __init__(self, *, epoch=0, testing=False):
-        self.epoch = epoch
+    def __init__(self, *, seed=0, testing=False, angle_count=10):
+        self.seed = seed
         self.testing = testing
+        self.angle_count = angle_count
+        self.world_cache = LRU(math.floor(BATCH_SIZE / angle_count))
 
     def __getitem__(self, index):
-        index += TOTAL_COUNT * self.epoch
+        index += TOTAL_COUNT * self.seed
 
         if self.testing:
             index += TRAIN_COUNT
 
-        index, angle = divmod(index, ANGLE_COUNT)
+        index, angle = divmod(index, self.angle_count)
 
-        if index not in WORLD_CACHE:
-            WORLD_CACHE[index] = SphereWorld(
-                seed=index, angles=ANGLE_COUNT, size=IMAGE_SIZE
+        if index not in self.world_cache:
+            self.world_cache[index] = SphereWorld(
+                seed=index, angles=self.angle_count, size=IMAGE_SIZE
             )
 
-        features, target = WORLD_CACHE[index].render(angle=angle)
+        features, target = self.world_cache[index].render(angle=angle)
 
         return (
             torch.tensor(features, dtype=torch.float),
@@ -75,6 +76,7 @@ class Raycaster(nn.Module):
 
 def train(dataloader, model, loss_fn, optimizer):
     size = len(dataloader.dataset)
+    total_loss = 0
     for batch, (X, y) in enumerate(dataloader):
         X, y = X.to(device), y.to(device)
         pred = model(X)
@@ -86,6 +88,8 @@ def train(dataloader, model, loss_fn, optimizer):
 
         loss, current = loss.item(), (batch + 1) * len(X)
         print(f"Loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+        total_loss += loss
+    return total_loss / len(dataloader)
 
 
 def test(dataloader, model, loss_fn):
@@ -104,6 +108,17 @@ def test(dataloader, model, loss_fn):
 
 
 if __name__ == "__main__":
+    parser = ArgumentParser(prog="learning-first-pass")
+
+    parser.add_argument("--epochs")
+    parser.add_argument("--delta")
+    parser.add_argument("--mode")
+    parser.add_argument("--seed")
+    parser.add_argument("--train-angle")
+    parser.add_argument("--test-angle")
+
+    args = parser.parse_args()
+
     if torch.backends.mps.is_available():
         device = "mps"
     else:
@@ -119,7 +134,6 @@ if __name__ == "__main__":
     if not Path("training_state.pth").exists():
         torch.save(
             {
-                "epochs": 0,
                 "model_state": raycaster.state_dict(),
                 "optimizer_state": optimizer.state_dict(),
             },
@@ -127,44 +141,53 @@ if __name__ == "__main__":
         )
 
     checkpoint = torch.load("training_state.pth")
-    epochs = checkpoint["epochs"]
-
     raycaster.load_state_dict(checkpoint["model_state"])
     optimizer.load_state_dict(checkpoint["optimizer_state"])
+
+    epochs = int(args.epochs)
+    epoch_delta = int(args.delta)
+    train_angle = int(args.train_angle)
+    test_angle = int(args.test_angle)
+    seed = int(args.seed)
 
     wandb.init(
         project="learning-first-pass",
         config={
-            "epochs": 10,
+            "mode": args.mode,
+            "seed": seed,
+            "train_angle": train_angle,
+            "test_angle": test_angle,
         },
     )
 
-    for epoch in range(epochs, epochs + 10):
-        print(f"Epoch {epoch}")
+    for epoch in range(epochs, epochs + epoch_delta):
+        print(f"Epoch {epoch}, Seed: {seed}")
 
-        training_data = Images(epoch=epoch, testing=False)
-        test_data = Images(epoch=epoch, testing=True)
+        training_data = Images(seed=seed, testing=False, angle_count=train_angle)
+        test_data = Images(seed=seed, testing=True, angle_count=test_angle)
 
         training_dataloader = DataLoader(training_data, batch_size=BATCH_SIZE)
         test_dataloader = DataLoader(test_data, batch_size=BATCH_SIZE)
 
-        raycaster.train()
-        train(training_dataloader, raycaster, loss_fn, optimizer)
+        if args.mode == "train":
+            raycaster.train()
+            training_loss = train(training_dataloader, raycaster, loss_fn, optimizer)
+            wandb.log({"training_loss": training_loss}, step=epoch)
 
         raycaster.eval()
         testing_loss = test(test_dataloader, raycaster, loss_fn)
+        wandb.log({"testing_loss": testing_loss}, step=epoch)
 
-        wandb.log({ "testing_loss": testing_loss })
+        seed += 1
 
     print("Done!")
 
     torch.save(
         {
-            "epochs": epochs + 10,
             "model_state": raycaster.state_dict(),
             "optimizer_state": optimizer.state_dict(),
         },
         "training_state.pth",
     )
-    
+
     wandb.finish()

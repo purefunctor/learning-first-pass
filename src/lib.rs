@@ -24,8 +24,8 @@ mod world;
 pub fn random_scene(rng: &mut StdRng) -> World {
     let mut scene = Vec::new();
 
-    for a in -11..11 {
-        for b in -11..11 {
+    for a in -11..=11 {
+        for b in -11..=11 {
             let random_material: f64 = rng.gen();
 
             let origin = Point3::new(
