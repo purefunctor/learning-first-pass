@@ -26,7 +26,7 @@ class Images(Dataset):
         self.seed = seed
         self.testing = testing
         self.angle_count = angle_count
-        self.world_cache = LRU(math.floor(BATCH_SIZE / angle_count))
+        self.world_cache = LRU(math.ceil(BATCH_SIZE / angle_count))
 
     def __getitem__(self, index):
         index += TOTAL_COUNT * self.seed
