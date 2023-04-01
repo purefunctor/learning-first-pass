@@ -15,7 +15,7 @@ TRAIN_COUNT = 1000
 TEST_COUNT = 500
 TOTAL_COUNT = TRAIN_COUNT + TEST_COUNT
 
-IMAGE_SIZE = 32
+IMAGE_SIZE = 64
 BATCH_SIZE = 100
 
 device = "mps" if torch.backends.mps.is_available() else "cpu"
