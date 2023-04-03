@@ -11,6 +11,6 @@ python3 main.py --mode eval --epoch 0 --delta 50 --seed 0 --train-angle 10 --tra
 
 # test against 20, 50, 100 on a different seed
 python3 main.py --mode eval --epoch 0 --delta 50 --seed 100 --train-angle 10 --train-vertical 10 --test-angle 25 --test-vertical 20
-python3 main.py --mode eval --epoch 0 --delta 50 --seed 100 --train-angle 10 --train-vertical 10 --test-angle 50 --test-vertical 20
-python3 main.py --mode eval --epoch 0 --delta 50 --seed 100 --train-angle 10 --train-vertical 10 --test-angle 100 --test-vertical 20
-python3 main.py --mode eval --epoch 0 --delta 50 --seed 100 --train-angle 10 --train-vertical 10 --test-angle 360 --test-vertical 20
+python3 main.py --mode eval --epoch 0 --delta 50 --seed 100 --train-angle 10 --train-vertical 10 --test-angle 50 --test-vertical 30
+python3 main.py --mode eval --epoch 0 --delta 50 --seed 100 --train-angle 10 --train-vertical 10 --test-angle 100 --test-vertical 40
+python3 main.py --mode eval --epoch 0 --delta 50 --seed 100 --train-angle 10 --train-vertical 10 --test-angle 360 --test-vertical 50
