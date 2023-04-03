@@ -3,6 +3,7 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 from sphere_world import SphereWorld
 import torch
 from main import Raycaster
+import time
 
 checkpoint = torch.load("training_state.pth")
 device = "mps"
@@ -10,15 +11,20 @@ raycaster = Raycaster().to("mps")
 raycaster.load_state_dict(checkpoint["model_state"])
 raycaster.eval()
 
-world_0 = SphereWorld(seed=1_069_420, angles=10, size=64)
-world_1 = SphereWorld(seed=1_069_420, angles=20, size=64)
+world_0 = SphereWorld(seed=1_069_420, angles=10, verticals=10, size=64)
+world_1 = SphereWorld(seed=1_069_420, angles=20, verticals=20, size=64)
 
 figure = plt.figure()
 
 grid = ImageGrid(figure, 111, nrows_ncols=(2, 2), axes_pad=0.1)
 
-features_0, image_0 = world_0.render(angle=1)
-features_1, image_1 = world_1.render(angle=1)
+x = time.perf_counter_ns()
+features_0, image_0 = world_0.render(angle=1, vertical=1)
+print(time.perf_counter_ns() - x)
+
+x = time.perf_counter_ns()
+features_1, image_1 = world_1.render(angle=1, vertical=1)
+print(time.perf_counter_ns() - x)
 
 features_0, image_0 = (
     torch.tensor(features_0, device="mps", dtype=torch.float),
@@ -33,6 +39,7 @@ features_1, image_1 = (
 features_0 = features_0.unsqueeze(0)
 features_1 = features_1.unsqueeze(0)
 
+# TODO: benchmark this...
 prediction_0 = raycaster(features_0).squeeze(0)
 prediction_1 = raycaster(features_1).squeeze(0)
 

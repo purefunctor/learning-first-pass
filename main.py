@@ -22,11 +22,14 @@ device = "mps" if torch.backends.mps.is_available() else "cpu"
 
 
 class Images(Dataset):
-    def __init__(self, *, seed=0, testing=False, angle_count=10):
+    def __init__(self, *, seed=0, testing=False, angle_count=10, vertical_count=10):
         self.seed = seed
         self.testing = testing
         self.angle_count = angle_count
-        self.world_cache = LRU(math.ceil(BATCH_SIZE / angle_count))
+        self.vertical_count = vertical_count
+        self.world_cache = LRU(
+            math.ceil(BATCH_SIZE / (self.angle_count * self.vertical_count))
+        )
 
     def __getitem__(self, index):
         index += TOTAL_COUNT * self.seed
@@ -34,14 +37,20 @@ class Images(Dataset):
         if self.testing:
             index += TRAIN_COUNT
 
-        index, angle = divmod(index, self.angle_count)
+        index, angle = divmod(index, self.angle_count * self.vertical_count)
+        angle, vertical = divmod(angle, self.angle_count)
 
         if index not in self.world_cache:
             self.world_cache[index] = SphereWorld(
-                seed=index, angles=self.angle_count, size=IMAGE_SIZE
+                seed=index,
+                angles=self.angle_count,
+                verticals=self.vertical_count,
+                size=IMAGE_SIZE,
             )
 
-        features, target = self.world_cache[index].render(angle=angle)
+        features, target = self.world_cache[index].render(
+            angle=angle, vertical=vertical
+        )
 
         return (
             torch.tensor(features, dtype=torch.float),
@@ -53,7 +62,6 @@ class Images(Dataset):
             return TEST_COUNT
         else:
             return TRAIN_COUNT
-
 
 class Raycaster(nn.Module):
     def __init__(self):
@@ -115,7 +123,9 @@ if __name__ == "__main__":
     parser.add_argument("--mode")
     parser.add_argument("--seed")
     parser.add_argument("--train-angle")
+    parser.add_argument("--train-vertical")
     parser.add_argument("--test-angle")
+    parser.add_argument("--test-vertical")
 
     args = parser.parse_args()
 
@@ -149,7 +159,9 @@ if __name__ == "__main__":
     epochs = int(args.epochs)
     epoch_delta = int(args.delta)
     train_angle = int(args.train_angle)
+    train_vertical = int(args.train_vertical)
     test_angle = int(args.test_angle)
+    test_vertical = int(args.test_vertical)
     seed = int(args.seed)
 
     wandb.init(
@@ -158,15 +170,27 @@ if __name__ == "__main__":
             "mode": args.mode,
             "seed": seed,
             "train_angle": train_angle,
+            "train_vertical": test_vertical,
             "test_angle": test_angle,
+            "test_vertical": test_vertical,
         },
     )
 
     for epoch in range(epochs, epochs + epoch_delta):
         print(f"Epoch {epoch}, Seed: {seed}")
 
-        training_data = Images(seed=seed, testing=False, angle_count=train_angle)
-        test_data = Images(seed=seed, testing=True, angle_count=test_angle)
+        training_data = Images(
+            seed=seed,
+            testing=False,
+            angle_count=train_angle,
+            vertical_count=train_vertical,
+        )
+        test_data = Images(
+            seed=seed,
+            testing=True,
+            angle_count=test_angle,
+            vertical_count=test_vertical,
+        )
 
         training_dataloader = DataLoader(training_data, batch_size=BATCH_SIZE)
         test_dataloader = DataLoader(test_data, batch_size=BATCH_SIZE)

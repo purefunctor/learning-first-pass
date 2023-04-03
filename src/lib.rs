@@ -180,13 +180,14 @@ type Target = Array3<f64>;
 #[pyclass]
 struct SphereWorld {
     angles: u64,
+    verticals: u64,
     size: u64,
     rng: StdRng,
     scene: World,
 }
 
 impl SphereWorld {
-    fn render_impl(&mut self, angle: u64) -> (Features, Target) {
+    fn render_impl(&mut self, angle: u64, vertical: u64) -> (Features, Target) {
         const SAMPLES_PER_PIXEL: usize = 50;
 
         let aspect_ratio = 1.0;
@@ -196,7 +197,11 @@ impl SphereWorld {
             let angle_radians = angle as f64 * 2.0 * std::f64::consts::PI / self.angles as f64;
             let x = radius * angle_radians.cos();
             let z = radius * angle_radians.sin();
-            Point3::new(x, 10.0, z)
+            Point3::new(
+                x,
+                (vertical as f64 + 1.0) * 9.0 / self.verticals as f64 + 1.0,
+                z,
+            )
         };
 
         let look_at = Point3::new(0.0, 0.0, 0.0);
@@ -284,27 +289,39 @@ impl SphereWorld {
 #[pymethods]
 impl SphereWorld {
     #[new]
-    #[pyo3(signature = (*, angles, seed, size))]
-    fn new(angles: u64, seed: u64, size: u64) -> Self {
+    #[pyo3(signature = (*, angles, verticals, seed, size))]
+    fn new(angles: u64, verticals: u64, seed: u64, size: u64) -> Self {
         let mut rng = StdRng::seed_from_u64(seed);
         let scene = random_scene(&mut rng);
         Self {
             angles,
+            verticals,
             size,
             rng,
             scene,
         }
     }
 
-    #[pyo3(signature = (*, angle))]
-    fn render<'py>(&mut self, py: Python<'py>, angle: u64) -> PyResult<&'py PyTuple> {
+    #[pyo3(signature = (*, angle, vertical))]
+    fn render<'py>(
+        &mut self,
+        py: Python<'py>,
+        angle: u64,
+        vertical: u64,
+    ) -> PyResult<&'py PyTuple> {
         if angle >= self.angles {
             return Err(PyValueError::new_err(format!(
                 "angle cannot be bigger than {}",
                 self.angles - 1
             )));
         }
-        let (features, target) = self.render_impl(angle);
+        if vertical >= self.verticals {
+            return Err(PyValueError::new_err(format!(
+                "vertical cannot be bigger than {}",
+                self.verticals - 1
+            )));
+        }
+        let (features, target) = self.render_impl(angle, vertical);
         Ok(PyTuple::new(
             py,
             &[features.to_pyarray(py), target.to_pyarray(py)],
