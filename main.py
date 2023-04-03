@@ -15,7 +15,7 @@ TRAIN_COUNT = 1000
 TEST_COUNT = 500
 TOTAL_COUNT = TRAIN_COUNT + TEST_COUNT
 
-IMAGE_SIZE = 64
+IMAGE_SIZE = 32
 BATCH_SIZE = 100
 
 device = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -38,7 +38,7 @@ class Images(Dataset):
             index += TRAIN_COUNT
 
         index, angle = divmod(index, self.angle_count * self.vertical_count)
-        angle, vertical = divmod(angle, self.angle_count)
+        angle, vertical = divmod(angle, self.vertical_count)
 
         if index not in self.world_cache:
             self.world_cache[index] = SphereWorld(
