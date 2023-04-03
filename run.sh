@@ -13,4 +13,4 @@ python3 main.py --mode eval --epoch 0 --delta 50 --seed 0 --train-angle 10 --tes
 python3 main.py --mode eval --epoch 0 --delta 50 --seed 100 --train-angle 10 --test-angle 25
 python3 main.py --mode eval --epoch 0 --delta 50 --seed 100 --train-angle 10 --test-angle 50
 python3 main.py --mode eval --epoch 0 --delta 50 --seed 100 --train-angle 10 --test-angle 100
-python3 main.py --mode-eval --epoch 0 --delta 50 --seed 100 --train-angle 10 --test-angle 360
+python3 main.py --mode eval --epoch 0 --delta 50 --seed 100 --train-angle 10 --test-angle 360
