@@ -22,7 +22,9 @@ device = "mps" if torch.backends.mps.is_available() else "cpu"
 
 
 class Images(Dataset):
-    def __init__(self, *, seed=0, testing=False, angle_count=10, vertical_count=10):
+    def __init__(
+        self, *, seed=0, testing=False, angle_count=10, vertical_count=10, random_angles=False
+    ):
         self.seed = seed
         self.testing = testing
         self.angle_count = angle_count
@@ -30,6 +32,7 @@ class Images(Dataset):
         self.world_cache = LRU(
             math.ceil(BATCH_SIZE / (self.angle_count * self.vertical_count))
         )
+        self.random = random_angles
 
     def __getitem__(self, index):
         index += TOTAL_COUNT * self.seed
@@ -48,9 +51,12 @@ class Images(Dataset):
                 size=IMAGE_SIZE,
             )
 
-        features, target = self.world_cache[index].render(
-            angle=angle, vertical=vertical
-        )
+        if self.random:
+            features, target = self.world_cache[index].render_random()
+        else:
+            features, target = self.world_cache[index].render(
+                angle=angle, vertical=vertical
+            )
 
         return (
             torch.tensor(features, dtype=torch.float),
@@ -62,6 +68,7 @@ class Images(Dataset):
             return TEST_COUNT
         else:
             return TRAIN_COUNT
+
 
 class Raycaster(nn.Module):
     def __init__(self):
@@ -126,6 +133,7 @@ if __name__ == "__main__":
     parser.add_argument("--train-vertical")
     parser.add_argument("--test-angle")
     parser.add_argument("--test-vertical")
+    parser.add_argument("--random-angles", action="store_true")
 
     args = parser.parse_args()
 
@@ -163,6 +171,7 @@ if __name__ == "__main__":
     test_angle = int(args.test_angle)
     test_vertical = int(args.test_vertical)
     seed = int(args.seed)
+    random_angles = args.random_angles
 
     wandb.init(
         project="learning-first-pass",
@@ -190,6 +199,7 @@ if __name__ == "__main__":
             testing=True,
             angle_count=test_angle,
             vertical_count=test_vertical,
+            random_angles=random_angles,
         )
 
         training_dataloader = DataLoader(training_data, batch_size=BATCH_SIZE)
