@@ -188,10 +188,6 @@ struct SphereWorld {
 
 impl SphereWorld {
     fn render_impl(&mut self, angle: u64, vertical: u64) -> (Features, Target) {
-        const SAMPLES_PER_PIXEL: usize = 50;
-
-        let aspect_ratio = 1.0;
-
         let look_from = {
             let radius = 10.0;
             let angle_radians = angle as f64 * 2.0 * std::f64::consts::PI / self.angles as f64;
@@ -203,94 +199,19 @@ impl SphereWorld {
                 z,
             )
         };
-
-        let look_at = Point3::new(0.0, 0.0, 0.0);
-        let v_up = Vec3::new(0.0, 1.0, 0.0);
-        let distance_to_focus = 10.0;
-        let aperture = 0.1;
-        let should_blur = false;
-
-        let camera = Camera::new(
-            look_from,
-            look_at,
-            v_up,
-            20.0,
-            aspect_ratio,
-            aperture,
-            distance_to_focus,
-            should_blur,
-        );
-
-        let width = self.size as usize;
-        let height = self.size as usize;
-
-        let mut features = Features::zeros([CHANNELS, height, width]);
-        let mut target = Target::zeros([3, height, width]);
-
-        for j in 0..height {
-            for i in 0..width {
-                // first ray has no deviation
-                let u = i as f64 / (width - 1) as f64;
-                let v = j as f64 / (height - 1) as f64;
-
-                let ray = camera.ray(&mut self.rng, u, v);
-                let (pixel_info, mut pixel_color) = ray_info(&mut self.rng, &ray, &self.scene);
-
-                // whilst subsequent rays do
-                for _ in 0..SAMPLES_PER_PIXEL - 1 {
-                    let random_u: f64 = self.rng.gen();
-                    let random_v: f64 = self.rng.gen();
-
-                    let u = (i as f64 + random_u) / (width - 1) as f64;
-                    let v = (j as f64 + random_v) / (height - 1) as f64;
-
-                    let ray = camera.ray(&mut self.rng, u, v);
-                    pixel_color += ray_info(&mut self.rng, &ray, &self.scene).1;
-                }
-
-                let ir = (pixel_color.x() / (SAMPLES_PER_PIXEL as f64)).sqrt();
-                let ig = (pixel_color.y() / (SAMPLES_PER_PIXEL as f64)).sqrt();
-                let ib = (pixel_color.z() / (SAMPLES_PER_PIXEL as f64)).sqrt();
-
-                target[[0, j, i]] = ir;
-                target[[1, j, i]] = ig;
-                target[[2, j, i]] = ib;
-
-                features[[0, j, i]] = pixel_info.is_lambertian;
-                features[[1, j, i]] = pixel_info.is_metal;
-                features[[2, j, i]] = pixel_info.is_dielectric;
-                features[[3, j, i]] = pixel_info.is_nothing;
-                features[[4, j, i]] = pixel_info.is_sky;
-                features[[5, j, i]] = pixel_info.lr;
-                features[[6, j, i]] = pixel_info.lg;
-                features[[7, j, i]] = pixel_info.lb;
-                features[[8, j, i]] = pixel_info.mr;
-                features[[9, j, i]] = pixel_info.mg;
-                features[[10, j, i]] = pixel_info.mb;
-                features[[11, j, i]] = pixel_info.mf;
-                features[[12, j, i]] = pixel_info.di;
-                features[[13, j, i]] = pixel_info.sphere_x;
-                features[[14, j, i]] = pixel_info.sphere_y;
-                features[[15, j, i]] = pixel_info.sphere_z;
-                features[[16, j, i]] = pixel_info.sphere_r;
-                features[[17, j, i]] = pixel_info.color_r;
-                features[[18, j, i]] = pixel_info.color_g;
-                features[[19, j, i]] = pixel_info.color_b;
-                features[[20, j, i]] = pixel_info.point_x;
-                features[[21, j, i]] = pixel_info.point_y;
-                features[[22, j, i]] = pixel_info.point_z;
-            }
-        }
-
-        (features, target)
+        self.render_at(look_from)
     }
 
     fn render_random_impl(&mut self) -> (Features, Target) {
+        let look_from = Point3::random(&mut self.rng, -15.0..15.0);
+        self.render_at(look_from)
+    }
+
+    fn render_at(&mut self, look_from: Point3) -> (Features, Target) {
         const SAMPLES_PER_PIXEL: usize = 50;
 
         let aspect_ratio = 1.0;
 
-        let look_from = Point3::random(&mut self.rng, -15.0..15.0);
         let look_at = Point3::new(0.0, 0.0, 0.0);
         let v_up = Vec3::new(0.0, 1.0, 0.0);
         let distance_to_focus = 10.0;
