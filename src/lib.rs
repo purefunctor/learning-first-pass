@@ -66,8 +66,10 @@ pub fn random_scene(rng: &mut StdRng) -> World {
 
 pub fn ray_info(rng: &mut StdRng, ray: &Ray, world: &World) -> (Info, Color) {
     if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
-        if let Some((attenuation, _)) = hit.object.material.scatter(rng, ray, &hit) {
-            (Info::from_hit(hit, attenuation), attenuation)
+        if let Some((attenuation, ray)) = hit.object.material.scatter(rng, ray, &hit) {
+            let info = Info::from_hit(hit, attenuation);
+            let color = attenuation * ray_deep(rng, &ray, world, 50);
+            (info, color)
         } else {
             (Info::from_nothing(), Color::new(0.0, 0.0, 0.0))
         }
@@ -76,6 +78,24 @@ pub fn ray_info(rng: &mut StdRng, ray: &Ray, world: &World) -> (Info, Color) {
         let t = 0.5 * (unit_direction.y() + 1.0);
         let color = (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
         (Info::from_sky(color), color)
+    }
+}
+
+pub fn ray_deep(rng: &mut StdRng, ray: &Ray, world: &World, depth: usize) -> Color {
+    if depth <= 0 {
+        return Color::new(0.0, 0.0, 0.0);
+    }
+    if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
+        if let Some((attenuation, ray)) = hit.object.material.scatter(rng, ray, &hit) {
+            attenuation * ray_deep(rng, &ray, world, depth - 1)
+        } else {
+            Color::new(0.0, 0.0, 0.0)
+        }
+    } else {
+        let unit_direction = ray.direction.normalized();
+        let t = 0.5 * (unit_direction.y() + 1.0);
+        let color = (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
+        color
     }
 }
 

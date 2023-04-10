@@ -11,20 +11,14 @@ raycaster = Raycaster().to("mps")
 raycaster.load_state_dict(checkpoint["model_state"])
 raycaster.eval()
 
-world_0 = SphereWorld(seed=1_069_420, angles=10, verticals=10, size=64)
-world_1 = SphereWorld(seed=1_069_420, angles=20, verticals=20, size=64)
+world_0 = SphereWorld(seed=1_069_420, angles=10, verticals=10, size=128)
 
 figure = plt.figure()
 
 grid = ImageGrid(figure, 111, nrows_ncols=(2, 2), axes_pad=0.1)
 
-x = time.perf_counter_ns()
 features_0, image_0 = world_0.render(angle=1, vertical=1)
-print(time.perf_counter_ns() - x)
-
-x = time.perf_counter_ns()
-features_1, image_1 = world_1.render(angle=1, vertical=1)
-print(time.perf_counter_ns() - x)
+features_1, image_1 = world_0.render_random()
 
 features_0, image_0 = (
     torch.tensor(features_0, device="mps", dtype=torch.float),
