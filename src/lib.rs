@@ -82,21 +82,25 @@ pub fn ray_info(rng: &mut StdRng, ray: &Ray, world: &World) -> (Info, Color) {
 }
 
 pub fn ray_deep(rng: &mut StdRng, ray: &Ray, world: &World, depth: usize) -> Color {
-    if depth <= 0 {
-        return Color::new(0.0, 0.0, 0.0);
-    }
-    if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
-        if let Some((attenuation, ray)) = hit.object.material.scatter(rng, ray, &hit) {
-            attenuation * ray_deep(rng, &ray, world, depth - 1)
+    let mut current_ray = *ray;
+    let mut current_color = Color::new(1.0, 1.0, 1.0);
+    for _ in 0..depth {
+        if let Some(hit) = world.hit(&current_ray, 0.001, f64::INFINITY) {
+            if let Some((attenuation, future_ray)) =
+                hit.object.material.scatter(rng, &current_ray, &hit)
+            {
+                current_color *= attenuation;
+                current_ray = future_ray;
+            } else {
+                return Color::new(0.0, 0.0, 0.0);
+            }
         } else {
-            Color::new(0.0, 0.0, 0.0)
+            let unit_direction = ray.direction.normalized();
+            let t = 0.5 * (unit_direction.y() + 1.0);
+            return current_color * (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
         }
-    } else {
-        let unit_direction = ray.direction.normalized();
-        let t = 0.5 * (unit_direction.y() + 1.0);
-        let color = (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
-        color
     }
+    current_color
 }
 
 const CHANNELS: usize = 23;
