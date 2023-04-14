@@ -1,4 +1,4 @@
-use rand::rngs::StdRng;
+use rand_chacha::ChaCha8Rng;
 
 use crate::{
     ray::Ray,
@@ -54,7 +54,7 @@ impl Camera {
         }
     }
 
-    pub fn ray(&self, rng: &mut StdRng, s: f64, t: f64) -> Ray {
+    pub fn ray(&self, rng: &mut ChaCha8Rng, s: f64, t: f64) -> Ray {
         let lens_radius_random = self.lens_radius * Vec3::random_in_unit_disk(rng);
         let offset = self.cu * lens_radius_random.x() + self.cv * lens_radius_random.y();
         Ray::new(

@@ -1,4 +1,5 @@
-use rand::{rngs::StdRng, Rng};
+use rand::Rng;
+use rand_chacha::ChaCha8Rng;
 
 use crate::{
     hit::Hit,
@@ -14,7 +15,7 @@ pub enum Material {
 }
 
 impl Material {
-    pub fn scatter(&self, rng: &mut StdRng, ray: &Ray, hit: &Hit) -> Option<(Color, Ray)> {
+    pub fn scatter(&self, rng: &mut ChaCha8Rng, ray: &Ray, hit: &Hit) -> Option<(Color, Ray)> {
         match self {
             Material::Lambertian { albedo } => {
                 let mut scatter_direction =

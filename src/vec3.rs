@@ -3,7 +3,8 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Range, Sub, SubAssign},
 };
 
-use rand::{rngs::StdRng, Rng};
+use rand::Rng;
+use rand_chacha::ChaCha8Rng;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Vec3 {
@@ -78,7 +79,7 @@ impl Vec3 {
         format!("{} {} {}", ir, ig, ib)
     }
 
-    pub fn random(rng: &mut StdRng, r: Range<f64>) -> Self {
+    pub fn random(rng: &mut ChaCha8Rng, r: Range<f64>) -> Self {
         Self {
             e: [
                 rng.gen_range(r.clone()),
@@ -88,7 +89,7 @@ impl Vec3 {
         }
     }
 
-    pub fn random_in_unit_sphere(rng: &mut StdRng) -> Self {
+    pub fn random_in_unit_sphere(rng: &mut ChaCha8Rng) -> Self {
         loop {
             let v = Vec3::random(rng, -1.0..1.0);
             if v.length_squared() < 1.0 {
@@ -97,7 +98,7 @@ impl Vec3 {
         }
     }
 
-    pub fn random_in_hemisphere(rng: &mut StdRng, normal: Vec3) -> Vec3 {
+    pub fn random_in_hemisphere(rng: &mut ChaCha8Rng, normal: Vec3) -> Vec3 {
         let in_unit_sphere = Self::random_in_unit_sphere(rng);
         if in_unit_sphere.dot(normal) > 0.0 {
             in_unit_sphere
@@ -122,7 +123,7 @@ impl Vec3 {
         r_out_perp + r_out_parallel
     }
 
-    pub fn random_in_unit_disk(rng: &mut StdRng) -> Vec3 {
+    pub fn random_in_unit_disk(rng: &mut ChaCha8Rng) -> Vec3 {
         loop {
             let p = Vec3::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0), 0.0);
             if p.length_squared() < 1.0 {

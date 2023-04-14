@@ -1,5 +1,6 @@
 use camera::Camera;
 use hit::Hit;
+use itertools::iproduct;
 use material::Material;
 use ndarray::Array3;
 use numpy::ToPyArray;
@@ -9,8 +10,10 @@ use pyo3::{
     types::{PyModule, PyTuple},
     PyResult, Python,
 };
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 use ray::Ray;
+use rayon::prelude::*;
 use vec3::{Color, Point3, Vec3};
 use world::{Object, ObjectKind, World};
 
@@ -21,7 +24,7 @@ mod ray;
 mod vec3;
 mod world;
 
-pub fn random_scene(rng: &mut StdRng) -> World {
+pub fn random_scene(rng: &mut ChaCha8Rng) -> World {
     let mut scene = Vec::new();
 
     for a in -11..=11 {
@@ -64,7 +67,7 @@ pub fn random_scene(rng: &mut StdRng) -> World {
     World(scene)
 }
 
-pub fn ray_info(rng: &mut StdRng, ray: &Ray, world: &World) -> (Info, Color) {
+pub fn ray_info(rng: &mut ChaCha8Rng, ray: &Ray, world: &World) -> (Info, Color) {
     if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
         if let Some((attenuation, ray)) = hit.object.material.scatter(rng, ray, &hit) {
             let info = Info::from_hit(hit, attenuation);
@@ -81,7 +84,7 @@ pub fn ray_info(rng: &mut StdRng, ray: &Ray, world: &World) -> (Info, Color) {
     }
 }
 
-pub fn ray_deep(rng: &mut StdRng, ray: &Ray, world: &World, depth: usize) -> Color {
+pub fn ray_deep(rng: &mut ChaCha8Rng, ray: &Ray, world: &World, depth: usize) -> Color {
     let mut current_ray = *ray;
     let mut current_color = Color::new(1.0, 1.0, 1.0);
     for _ in 0..depth {
@@ -97,7 +100,8 @@ pub fn ray_deep(rng: &mut StdRng, ray: &Ray, world: &World, depth: usize) -> Col
         } else {
             let unit_direction = ray.direction.normalized();
             let t = 0.5 * (unit_direction.y() + 1.0);
-            return current_color * (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
+            return current_color * (1.0 - t) * Color::new(1.0, 1.0, 1.0)
+                + t * Color::new(0.5, 0.7, 1.0);
         }
     }
     current_color
@@ -206,7 +210,7 @@ struct SphereWorld {
     angles: u64,
     verticals: u64,
     size: u64,
-    rng: StdRng,
+    rng: ChaCha8Rng,
     scene: World,
 }
 
@@ -256,62 +260,71 @@ impl SphereWorld {
         let width = self.size as usize;
         let height = self.size as usize;
 
-        let mut features = Features::zeros([CHANNELS, height, width]);
-        let mut target = Target::zeros([3, height, width]);
+        let results: Vec<_> = iproduct!(0..height, 0..width)
+            .par_bridge()
+            .into_par_iter()
+            .map(|(j, i)| {
+                let mut rng = self.rng.clone();
+                rng.set_stream((j * height + i * width) as u64);
 
-        for j in 0..height {
-            for i in 0..width {
                 // first ray has no deviation
                 let u = i as f64 / (width - 1) as f64;
                 let v = j as f64 / (height - 1) as f64;
 
-                let ray = camera.ray(&mut self.rng, u, v);
-                let (pixel_info, mut pixel_color) = ray_info(&mut self.rng, &ray, &self.scene);
+                let ray = camera.ray(&mut rng, u, v);
+                let (pixel_info, mut pixel_color) = ray_info(&mut rng, &ray, &self.scene);
 
                 // whilst subsequent rays do
                 for _ in 0..SAMPLES_PER_PIXEL - 1 {
-                    let random_u: f64 = self.rng.gen();
-                    let random_v: f64 = self.rng.gen();
+                    let random_u: f64 = rng.gen();
+                    let random_v: f64 = rng.gen();
 
                     let u = (i as f64 + random_u) / (width - 1) as f64;
                     let v = (j as f64 + random_v) / (height - 1) as f64;
 
-                    let ray = camera.ray(&mut self.rng, u, v);
-                    pixel_color += ray_info(&mut self.rng, &ray, &self.scene).1;
+                    let ray = camera.ray(&mut rng, u, v);
+                    pixel_color += ray_info(&mut rng, &ray, &self.scene).1;
                 }
 
                 let ir = (pixel_color.x() / (SAMPLES_PER_PIXEL as f64)).sqrt();
                 let ig = (pixel_color.y() / (SAMPLES_PER_PIXEL as f64)).sqrt();
                 let ib = (pixel_color.z() / (SAMPLES_PER_PIXEL as f64)).sqrt();
 
-                target[[0, j, i]] = ir;
-                target[[1, j, i]] = ig;
-                target[[2, j, i]] = ib;
+                ((j, i), (ir, ig, ib), pixel_info)
+            })
+            .collect();
 
-                features[[0, j, i]] = pixel_info.is_lambertian;
-                features[[1, j, i]] = pixel_info.is_metal;
-                features[[2, j, i]] = pixel_info.is_dielectric;
-                features[[3, j, i]] = pixel_info.is_nothing;
-                features[[4, j, i]] = pixel_info.is_sky;
-                features[[5, j, i]] = pixel_info.lr;
-                features[[6, j, i]] = pixel_info.lg;
-                features[[7, j, i]] = pixel_info.lb;
-                features[[8, j, i]] = pixel_info.mr;
-                features[[9, j, i]] = pixel_info.mg;
-                features[[10, j, i]] = pixel_info.mb;
-                features[[11, j, i]] = pixel_info.mf;
-                features[[12, j, i]] = pixel_info.di;
-                features[[13, j, i]] = pixel_info.sphere_x;
-                features[[14, j, i]] = pixel_info.sphere_y;
-                features[[15, j, i]] = pixel_info.sphere_z;
-                features[[16, j, i]] = pixel_info.sphere_r;
-                features[[17, j, i]] = pixel_info.color_r;
-                features[[18, j, i]] = pixel_info.color_g;
-                features[[19, j, i]] = pixel_info.color_b;
-                features[[20, j, i]] = pixel_info.point_x;
-                features[[21, j, i]] = pixel_info.point_y;
-                features[[22, j, i]] = pixel_info.point_z;
-            }
+        let mut features = Features::zeros([CHANNELS, height, width]);
+        let mut target = Target::zeros([3, height, width]);
+
+        for ((j, i), (ir, ig, ib), pixel_info) in results {
+            target[[0, j, i]] = ir;
+            target[[1, j, i]] = ig;
+            target[[2, j, i]] = ib;
+
+            features[[0, j, i]] = pixel_info.is_lambertian;
+            features[[1, j, i]] = pixel_info.is_metal;
+            features[[2, j, i]] = pixel_info.is_dielectric;
+            features[[3, j, i]] = pixel_info.is_nothing;
+            features[[4, j, i]] = pixel_info.is_sky;
+            features[[5, j, i]] = pixel_info.lr;
+            features[[6, j, i]] = pixel_info.lg;
+            features[[7, j, i]] = pixel_info.lb;
+            features[[8, j, i]] = pixel_info.mr;
+            features[[9, j, i]] = pixel_info.mg;
+            features[[10, j, i]] = pixel_info.mb;
+            features[[11, j, i]] = pixel_info.mf;
+            features[[12, j, i]] = pixel_info.di;
+            features[[13, j, i]] = pixel_info.sphere_x;
+            features[[14, j, i]] = pixel_info.sphere_y;
+            features[[15, j, i]] = pixel_info.sphere_z;
+            features[[16, j, i]] = pixel_info.sphere_r;
+            features[[17, j, i]] = pixel_info.color_r;
+            features[[18, j, i]] = pixel_info.color_g;
+            features[[19, j, i]] = pixel_info.color_b;
+            features[[20, j, i]] = pixel_info.point_x;
+            features[[21, j, i]] = pixel_info.point_y;
+            features[[22, j, i]] = pixel_info.point_z;
         }
 
         (features, target)
@@ -323,7 +336,7 @@ impl SphereWorld {
     #[new]
     #[pyo3(signature = (*, angles, verticals, seed, size))]
     fn new(angles: u64, verticals: u64, seed: u64, size: u64) -> Self {
-        let mut rng = StdRng::seed_from_u64(seed);
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let scene = random_scene(&mut rng);
         Self {
             angles,
