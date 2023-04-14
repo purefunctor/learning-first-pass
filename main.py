@@ -9,16 +9,22 @@ from lru import LRU
 from sphere_world import SphereWorld
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
+import torch_directml
 
 
 TRAIN_COUNT = 1000
 TEST_COUNT = 500
 TOTAL_COUNT = TRAIN_COUNT + TEST_COUNT
 
-IMAGE_SIZE = 32
+IMAGE_SIZE = 16
 BATCH_SIZE = 100
 
-device = "mps" if torch.backends.mps.is_available() else "cpu"
+if torch_directml.is_available():
+    device = torch_directml.device()
+elif torch.backends.mps.is_available():
+    device = "mps"
+else:
+    device = "cpu"
 
 
 class Images(Dataset):
@@ -144,7 +150,7 @@ if __name__ == "__main__":
     else:
         device = "cpu"
 
-    print(f"Using Device: {device}")
+    print(f"Using Device: {device}, DirectML? {torch_directml.is_available()}")
 
     raycaster = Raycaster().to(device)
     loss_fn = nn.MSELoss()
