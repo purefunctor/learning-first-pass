@@ -27,27 +27,38 @@ mod world;
 pub fn random_scene(rng: &mut ChaCha8Rng) -> World {
     let mut scene = Vec::new();
 
-    for a in -11..=11 {
-        for b in -11..=11 {
+    let ground = Object {
+        kind: ObjectKind::Sphere {
+            origin: Point3::new(0.0, -1000.0, 0.0),
+            radius: 1000.0,
+        },
+        material: Material::Lambertian {
+            albedo: Color::new(0.5, 0.5, 0.5),
+        },
+    };
+    scene.push(ground);
+
+    for a in -2..=2 {
+        for b in -2..=2 {
             let random_material: f64 = rng.gen();
 
             let origin = Point3::new(
                 (a as f64) + rng.gen_range(0.0..0.9),
-                0.2,
+                0.5,
                 (b as f64) + rng.gen_range(0.0..0.9),
             );
 
-            let radius: f64 = rng.gen_range(0.49..0.5);
+            let radius: f64 = rng.gen_range(0.4..0.5);
 
             let kind = ObjectKind::Sphere { origin, radius };
 
-            if random_material < 0.50 {
+            if random_material < 0.80 {
                 let material = Material::Lambertian {
                     albedo: Color::random(rng, 0.0..1.0) * Color::random(rng, 0.0..1.0),
                 };
                 let object = Object { kind, material };
                 scene.push(object);
-            } else if random_material < 0.75 {
+            } else if random_material < 0.95 {
                 let material = Material::Metal {
                     albedo: Color::random(rng, 0.4..1.0),
                     fuzz: rng.gen_range(0.0..0.5),
@@ -71,7 +82,7 @@ pub fn ray_info(rng: &mut ChaCha8Rng, ray: &Ray, world: &World) -> (Info, Color)
     if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
         if let Some((attenuation, ray)) = hit.object.material.scatter(rng, ray, &hit) {
             let info = Info::from_hit(hit, attenuation);
-            let color = attenuation * ray_deep(rng, &ray, world, 50);
+            let color = attenuation * ray_deep(rng, &ray, world, 100);
             (info, color)
         } else {
             (Info::from_nothing(), Color::new(0.0, 0.0, 0.0))
@@ -100,8 +111,8 @@ pub fn ray_deep(rng: &mut ChaCha8Rng, ray: &Ray, world: &World, depth: usize) ->
         } else {
             let unit_direction = ray.direction.normalized();
             let t = 0.5 * (unit_direction.y() + 1.0);
-            return current_color * (1.0 - t) * Color::new(1.0, 1.0, 1.0)
-                + t * Color::new(0.5, 0.7, 1.0);
+            let sky_color = (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
+            return current_color * sky_color;
         }
     }
     current_color
@@ -236,7 +247,7 @@ impl SphereWorld {
     }
 
     fn render_at(&mut self, look_from: Point3) -> (Features, Target) {
-        const SAMPLES_PER_PIXEL: usize = 50;
+        const SAMPLES_PER_PIXEL: usize = 100;
 
         let aspect_ratio = 1.0;
 
@@ -268,8 +279,8 @@ impl SphereWorld {
                 rng.set_stream((j * height + i * width) as u64);
 
                 // first ray has no deviation
-                let u = i as f64 / (width - 1) as f64;
-                let v = j as f64 / (height - 1) as f64;
+                let u = i as f64 / width as f64;
+                let v = j as f64 / height as f64;
 
                 let ray = camera.ray(&mut rng, u, v);
                 let (pixel_info, mut pixel_color) = ray_info(&mut rng, &ray, &self.scene);

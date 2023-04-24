@@ -1,13 +1,22 @@
 import matplotlib.pyplot as plt
+import torch
+import torch_directml
+
 from mpl_toolkits.axes_grid1 import ImageGrid
 from sphere_world import SphereWorld
-import torch
 from main import Raycaster
-import time
+
 
 checkpoint = torch.load("training_state.pth")
-device = "mps"
-raycaster = Raycaster().to("mps")
+if torch.backends.mps.is_available():
+    device = "mps"
+elif torch.cuda.is_available():
+    device = "cuda"
+elif torch_directml.is_available():
+    device = torch_directml.device()
+else:
+    device = "cpu"
+raycaster = Raycaster().to(device)
 raycaster.load_state_dict(checkpoint["model_state"])
 raycaster.eval()
 
@@ -21,13 +30,13 @@ features_0, image_0 = world_0.render(angle=1, vertical=1)
 features_1, image_1 = world_0.render_random()
 
 features_0, image_0 = (
-    torch.tensor(features_0, device="mps", dtype=torch.float),
-    torch.tensor(image_0, device="mps", dtype=torch.float),
+    torch.tensor(features_0, device=device, dtype=torch.float),
+    torch.tensor(image_0, device=device, dtype=torch.float),
 )
 
 features_1, image_1 = (
-    torch.tensor(features_1, device="mps", dtype=torch.float),
-    torch.tensor(image_1, device="mps", dtype=torch.float),
+    torch.tensor(features_1, device=device, dtype=torch.float),
+    torch.tensor(image_1, device=device, dtype=torch.float),
 )
 
 features_0 = features_0.unsqueeze(0)
