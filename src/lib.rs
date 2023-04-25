@@ -39,10 +39,37 @@ pub struct Plane {
     pub albedo: f64,
 }
 
-pub struct Light {
-    pub direction: Vector3<f64>,
-    pub color: Color,
-    pub intensity: f64,
+pub enum Light {
+    Directional {
+        direction: Vector3<f64>,
+        color: Color,
+        intensity: f64,
+    },
+}
+impl Light {
+    fn direction(&self, _: &Vector3<f64>) -> Vector3<f64> {
+        match self {
+            Light::Directional { direction, .. } => vec3_neg(vec3_normalized(*direction)),
+        }
+    }
+
+    fn intensity(&self, _: &Vector3<f64>) -> f64 {
+        match self {
+            Light::Directional { intensity, .. } => *intensity,
+        }
+    }
+
+    fn color(&self) -> &Color {
+        match self {
+            Light::Directional { color, .. } => color,
+        }
+    }
+
+    fn distance(&self, _: &Vector3<f64>) -> f64 {
+        match self {
+            Light::Directional { .. } => std::f64::INFINITY,
+        }
+    }
 }
 
 pub enum Element {
@@ -71,7 +98,7 @@ pub struct Scene {
     pub height: usize,
     pub fov: f64,
     pub elements: Vec<Element>,
-    pub light: Light,
+    pub lights: Vec<Light>,
     pub shadow_bias: f64,
 }
 
@@ -188,35 +215,53 @@ fn get_color(scene: &Scene, ray: &Ray, intersection: &Intersection) -> Color {
         vec3_mul(ray.direction, [intersection.distance; 3]),
     );
     let surface_normal = intersection.element.surface_normal(&hit_point);
-    let direction_to_light = vec3_neg(vec3_normalized(scene.light.direction));
 
-    let shadow_ray = Ray {
-        origin: vec3_add(hit_point, vec3_mul(surface_normal, [scene.shadow_bias; 3])),
-        direction: direction_to_light,
-    };
-    let in_light = scene.trace(&shadow_ray).is_none();
+    let mut color = Color { red: 0.0, green: 0.0, blue: 0.0 };
 
-    let light_intensity = if in_light { scene.light.intensity } else { 0.0 };
-    let light_power = vec3_dot(surface_normal, direction_to_light).max(0.0) * light_intensity;
-    let light_reflected = intersection.element.albedo() / std::f64::consts::PI;
+    for light in &scene.lights {
+        let direction_to_light = light.direction(&hit_point);
 
-    let Color {
-        red: element_red,
-        green: element_green,
-        blue: element_blue,
-    } = *intersection.element.color();
-
-    let Color {
-        red: light_red,
-        green: light_green,
-        blue: light_blue,
-    } = scene.light.color;
-
-    Color {
-        red: (element_red * light_red * light_power * light_reflected).clamp(0.0, 1.0),
-        green: (element_green * light_green * light_power * light_reflected).clamp(0.0, 1.0),
-        blue: (element_blue * light_blue * light_power * light_reflected).clamp(0.0, 1.0),
+        let shadow_ray = Ray {
+            origin: vec3_add(hit_point, vec3_mul(surface_normal, [scene.shadow_bias; 3])),
+            direction: direction_to_light,
+        };
+        let shadow_intersection = scene.trace(&shadow_ray);
+        let in_light = if let Some(intersection) = shadow_intersection {
+            intersection.distance > light.distance(&hit_point)
+        } else {
+            true
+        };
+    
+        let light_intensity = if in_light {
+            light.intensity(&hit_point)
+        } else {
+            0.0
+        };
+        let light_power = vec3_dot(surface_normal, direction_to_light).max(0.0) * light_intensity;
+        let light_reflected = intersection.element.albedo() / std::f64::consts::PI;
+    
+        let Color {
+            red: element_red,
+            green: element_green,
+            blue: element_blue,
+        } = *intersection.element.color();
+    
+        let Color {
+            red: light_red,
+            green: light_green,
+            blue: light_blue,
+        } = light.color();
+    
+        color.red += element_red * light_red * light_power * light_reflected;
+        color.green += element_green * light_green * light_power * light_reflected;
+        color.blue += element_blue * light_blue * light_power * light_reflected;
     }
+
+    color.red = color.red.clamp(0.0, 1.0);
+    color.green = color.green.clamp(0.0, 1.0);
+    color.blue = color.blue.clamp(0.0, 1.0);
+
+    color
 }
 
 const CHANNELS: usize = 3;
@@ -261,7 +306,7 @@ fn render(py: Python<'_>, width: usize, height: usize, fov: f64) -> PyResult<&'_
                 albedo: 0.20,
             }),
         ],
-        light: Light {
+        lights: vec![Light::Directional {
             direction: [-0.5, -1.0, -1.0],
             color: Color {
                 red: 1.0,
@@ -269,7 +314,7 @@ fn render(py: Python<'_>, width: usize, height: usize, fov: f64) -> PyResult<&'_
                 green: 1.0,
             },
             intensity: 20.0,
-        },
+        }],
         shadow_bias: 1e-13,
     };
 
