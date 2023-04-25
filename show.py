@@ -1,21 +1,8 @@
-from matplotlib import pyplot as plt
-from mpl_toolkits.axes_grid1 import ImageGrid
-from sphere_world import SphereWorld
-import time
+import numpy as np
 
-world = SphereWorld(seed=0, angles=3, verticals=3, size=256)
+from cpu_tracer import render
+from PIL import Image
 
-figure = plt.figure()
-
-grid = ImageGrid(figure, 111, nrows_ncols=(3, 3), axes_pad=0.1)
-
-for i in range(3):
-    for j in range(3):
-        ax = grid[i * 3 + j]
-        start = time.perf_counter()
-        _, image = world.render(angle=i, vertical=j)
-        print(time.perf_counter() - start)
-        ax.imshow(image.transpose((1, 2, 0)))
-        ax.invert_yaxis()
-
-plt.show()
+image ,= render(800, 600, 90)
+image = Image.fromarray(np.uint8(255 * image), "RGB")
+image.show()
