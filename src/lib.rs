@@ -72,6 +72,7 @@ pub struct Scene {
     pub fov: f64,
     pub elements: Vec<Element>,
     pub light: Light,
+    pub shadow_bias: f64,
 }
 
 pub struct Intersection<'a> {
@@ -188,7 +189,15 @@ fn get_color(scene: &Scene, ray: &Ray, intersection: &Intersection) -> Color {
     );
     let surface_normal = intersection.element.surface_normal(&hit_point);
     let direction_to_light = vec3_neg(vec3_normalized(scene.light.direction));
-    let light_power = vec3_dot(surface_normal, direction_to_light).max(0.0) * scene.light.intensity;
+
+    let shadow_ray = Ray {
+        origin: vec3_add(hit_point, vec3_mul(surface_normal, [scene.shadow_bias; 3])),
+        direction: direction_to_light,
+    };
+    let in_light = scene.trace(&shadow_ray).is_none();
+
+    let light_intensity = if in_light { scene.light.intensity } else { 0.0 };
+    let light_power = vec3_dot(surface_normal, direction_to_light).max(0.0) * light_intensity;
     let light_reflected = intersection.element.albedo() / std::f64::consts::PI;
 
     let Color {
@@ -261,6 +270,7 @@ fn render(py: Python<'_>, width: usize, height: usize, fov: f64) -> PyResult<&'_
             },
             intensity: 20.0,
         },
+        shadow_bias: 1e-13,
     };
 
     let pixels = iproduct!(0..width, 0..height)
