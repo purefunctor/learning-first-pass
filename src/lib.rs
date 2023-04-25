@@ -7,7 +7,7 @@ use pyo3::{
     wrap_pyfunction, PyResult, Python,
 };
 use rayon::prelude::{ParallelBridge, ParallelIterator};
-use vecmath::{vec3_normalized, Vector3, vec3_sub, vec3_dot};
+use vecmath::{vec3_add, vec3_dot, vec3_mul, vec3_neg, vec3_normalized, vec3_sub, Vector3};
 
 pub struct Color {
     pub red: f64,
@@ -15,17 +15,83 @@ pub struct Color {
     pub green: f64,
 }
 
+impl Color {
+    pub fn clamp(&self) -> Color {
+        Color {
+            red: self.red.min(1.0).max(0.0),
+            blue: self.blue.min(1.0).max(0.0),
+            green: self.green.min(1.0).max(0.0),
+        }
+    }
+}
+
 pub struct Sphere {
     pub origin: Vector3<f64>,
     pub radius: f64,
     pub color: Color,
+    pub albedo: f64,
+}
+
+pub struct Plane {
+    pub origin: Vector3<f64>,
+    pub normal: Vector3<f64>,
+    pub color: Color,
+    pub albedo: f64,
+}
+
+pub struct Light {
+    pub direction: Vector3<f64>,
+    pub color: Color,
+    pub intensity: f64,
+}
+
+pub enum Element {
+    Sphere(Sphere),
+    Plane(Plane),
+}
+
+impl Element {
+    pub fn color(&self) -> &Color {
+        match self {
+            Element::Sphere(s) => &s.color,
+            Element::Plane(p) => &p.color,
+        }
+    }
+
+    pub fn albedo(&self) -> f64 {
+        match self {
+            Element::Sphere(s) => s.albedo,
+            Element::Plane(p) => p.albedo,
+        }
+    }
 }
 
 pub struct Scene {
     pub width: usize,
     pub height: usize,
     pub fov: f64,
-    pub sphere: Sphere,
+    pub elements: Vec<Element>,
+    pub light: Light,
+}
+
+pub struct Intersection<'a> {
+    pub distance: f64,
+    pub element: &'a Element,
+}
+
+impl<'a> Intersection<'a> {
+    pub fn new(distance: f64, element: &'a Element) -> Intersection<'a> {
+        Intersection { distance, element }
+    }
+}
+
+impl Scene {
+    pub fn trace(&self, ray: &Ray) -> Option<Intersection> {
+        self.elements
+            .iter()
+            .filter_map(|s| s.intersect(ray).map(|d| Intersection::new(d, s)))
+            .min_by(|i1, i2| i1.distance.partial_cmp(&i2.distance).unwrap())
+    }
 }
 
 pub struct Ray {
@@ -37,7 +103,8 @@ impl Ray {
     pub fn create_prime(x: usize, y: usize, scene: &Scene) -> Ray {
         let fov_adjustment = (scene.fov.to_radians() / 2.0).tan();
         let aspect_ratio = (scene.width as f64) / (scene.height as f64);
-        let sensor_x = ((((x as f64 + 0.5) / scene.width as f64) * 2.0 - 1.0) * aspect_ratio) * fov_adjustment;
+        let sensor_x =
+            ((((x as f64 + 0.5) / scene.width as f64) * 2.0 - 1.0) * aspect_ratio) * fov_adjustment;
         let sensor_y = (1.0 - ((y as f64 + 0.5) / scene.height as f64) * 2.0) * fov_adjustment;
 
         Ray {
@@ -49,6 +116,8 @@ impl Ray {
 
 pub trait Intersectable {
     fn intersect(&self, ray: &Ray) -> Option<f64>;
+
+    fn surface_normal(&self, hit_point: &Vector3<f64>) -> Vector3<f64>;
 }
 
 impl Intersectable for Sphere {
@@ -62,16 +131,82 @@ impl Intersectable for Sphere {
             return None;
         }
 
-    let thc = (radius_s - opposite).sqrt();
-       let t0 = adjacent - thc;
-       let t1 = adjacent + thc;
+        let adjacent_inside = (radius_s - opposite).sqrt();
+        let adjacent_left_half = adjacent - adjacent_inside;
+        let adjacent_right_half = adjacent + adjacent_inside;
 
-       if t0 < 0.0 && t1 < 0.0 {
-           return None;
-       }
+        if adjacent_left_half < 0.0 && adjacent_right_half < 0.0 {
+            return None;
+        }
 
-       let distance = if t0 < t1 { t0 } else { t1 };
-       Some(distance)
+        Some(adjacent_left_half.min(adjacent_right_half))
+    }
+
+    fn surface_normal(&self, hit_point: &Vector3<f64>) -> Vector3<f64> {
+        vec3_normalized(vec3_sub(*hit_point, self.origin))
+    }
+}
+
+impl Intersectable for Plane {
+    fn intersect(&self, ray: &Ray) -> Option<f64> {
+        let denominator = vec3_dot(self.normal, ray.direction);
+        if denominator > 1e-6 {
+            let v = vec3_sub(self.origin, ray.origin);
+            let distance = vec3_dot(v, self.normal) / denominator;
+            if distance >= 0.0 {
+                return Some(distance);
+            }
+        }
+        None
+    }
+
+    fn surface_normal(&self, _: &Vector3<f64>) -> Vector3<f64> {
+        vec3_neg(self.normal)
+    }
+}
+
+impl Intersectable for Element {
+    fn intersect(&self, ray: &Ray) -> Option<f64> {
+        match self {
+            Element::Sphere(s) => s.intersect(ray),
+            Element::Plane(p) => p.intersect(ray),
+        }
+    }
+
+    fn surface_normal(&self, hit_point: &Vector3<f64>) -> Vector3<f64> {
+        match self {
+            Element::Sphere(s) => s.surface_normal(hit_point),
+            Element::Plane(p) => p.surface_normal(hit_point),
+        }
+    }
+}
+
+fn get_color(scene: &Scene, ray: &Ray, intersection: &Intersection) -> Color {
+    let hit_point = vec3_add(
+        ray.origin,
+        vec3_mul(ray.direction, [intersection.distance; 3]),
+    );
+    let surface_normal = intersection.element.surface_normal(&hit_point);
+    let direction_to_light = vec3_neg(vec3_normalized(scene.light.direction));
+    let light_power = vec3_dot(surface_normal, direction_to_light).max(0.0) * scene.light.intensity;
+    let light_reflected = intersection.element.albedo() / std::f64::consts::PI;
+
+    let Color {
+        red: element_red,
+        green: element_green,
+        blue: element_blue,
+    } = *intersection.element.color();
+
+    let Color {
+        red: light_red,
+        green: light_green,
+        blue: light_blue,
+    } = scene.light.color;
+
+    Color {
+        red: (element_red * light_red * light_power * light_reflected).clamp(0.0, 1.0),
+        green: (element_green * light_green * light_power * light_reflected).clamp(0.0, 1.0),
+        blue: (element_blue * light_blue * light_power * light_reflected).clamp(0.0, 1.0),
     }
 }
 
@@ -85,14 +220,46 @@ fn render(py: Python<'_>, width: usize, height: usize, fov: f64) -> PyResult<&'_
         width,
         height,
         fov,
-        sphere: Sphere {
-            origin: [0.0, 0.0, -5.0],
-            radius: 1.0,
+        elements: vec![
+            Element::Sphere(Sphere {
+                origin: [0.0, 0.0, -5.0],
+                radius: 1.0,
+                color: Color {
+                    red: 0.4,
+                    green: 1.0,
+                    blue: 0.4,
+                },
+                albedo: 0.20,
+            }),
+            Element::Sphere(Sphere {
+                origin: [1.0, 1.0, -4.0],
+                radius: 1.5,
+                color: Color {
+                    red: 0.7,
+                    green: 0.5,
+                    blue: 0.3,
+                },
+                albedo: 0.20,
+            }),
+            Element::Plane(Plane {
+                origin: [0.0, -2.0, -5.0],
+                normal: [0.0, -1.0, 0.0],
+                color: Color {
+                    red: 0.5,
+                    blue: 0.5,
+                    green: 0.5,
+                },
+                albedo: 0.20,
+            }),
+        ],
+        light: Light {
+            direction: [-0.5, -1.0, -1.0],
             color: Color {
-                red: 0.4,
+                red: 1.0,
+                blue: 1.0,
                 green: 1.0,
-                blue: 0.4,
             },
+            intensity: 20.0,
         },
     };
 
@@ -101,10 +268,16 @@ fn render(py: Python<'_>, width: usize, height: usize, fov: f64) -> PyResult<&'_
         .map(|(x, y)| {
             let ray = Ray::create_prime(x, y, &scene);
 
-            if let Some(_) = scene.sphere.intersect(&ray) {
-                (x, y, scene.sphere.color.red, scene.sphere.color.green, scene.sphere.color.blue)
+            if let Some(intersection) = scene.trace(&ray) {
+                let Color { red, green, blue } = get_color(&scene, &ray, &intersection);
+                (x, y, red, green, blue)
             } else {
-                (x, y, 0.0, 0.0, 0.0)   
+                let unit_direction = vec3_normalized(ray.direction);
+                let t = 0.5 * (unit_direction[1] + 1.0);
+                let r = (1.0 - t) * 1.0 + t * 0.5;
+                let g = (1.0 - t) * 1.0 + t * 0.7;
+                let b = (1.0 - t) * 1.0 + t * 1.0;
+                (x, y, r, g, b)
             }
         })
         .collect::<Vec<_>>();
