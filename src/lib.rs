@@ -1,4 +1,4 @@
-use std::ops::{Add, Mul, AddAssign};
+use std::ops::{Add, AddAssign, Mul};
 
 use itertools::iproduct;
 use ndarray::Array3;
@@ -8,8 +8,9 @@ use pyo3::{
     types::{PyModule, PyTuple},
     wrap_pyfunction, PyResult, Python,
 };
+use rand::Rng;
 use rayon::prelude::{ParallelBridge, ParallelIterator};
-use vecmath::{vec3_add, vec3_dot, vec3_mul, vec3_neg, vec3_normalized, vec3_sub, Vector3};
+use vecmath::{vec3_add, vec3_dot, vec3_mul, vec3_neg, vec3_normalized, vec3_sub, Vector3, vec3_square_len};
 
 #[derive(Clone, Copy)]
 pub struct Color {
@@ -75,15 +76,99 @@ impl Mul<Color> for Color {
 pub struct Sphere {
     pub origin: Vector3<f64>,
     pub radius: f64,
-    pub color: Color,
-    pub albedo: f64,
+    pub material: Material,
 }
 
 pub struct Plane {
     pub origin: Vector3<f64>,
     pub normal: Vector3<f64>,
-    pub color: Color,
-    pub albedo: f64,
+    pub material: Material,
+}
+
+pub enum Material {
+    Lambertian { color: Color, albedo: f64 },
+}
+
+impl Material {
+    pub fn scatter(
+        &self,
+        scene: &Scene,
+        intersection: &Intersection,
+        surface_hit: Vector3<f64>,
+        surface_normal: Vector3<f64>,
+    ) -> (Color, Ray) {
+        match self {
+            Material::Lambertian { .. } => {
+                let mut color = Color {
+                    red: 0.0,
+                    green: 0.0,
+                    blue: 0.0,
+                };
+
+                for light in &scene.lights {
+                    let direction_to_light = light.direction(&surface_hit);
+
+                    // let shadow_ray = Ray {
+                    //     origin: vec3_add(
+                    //         surface_hit,
+                    //         vec3_mul(surface_normal, [scene.shadow_bias; 3]),
+                    //     ),
+                    //     direction: direction_to_light,
+                    // };
+                    // let shadow_intersection = scene.trace(&shadow_ray);
+                    // let in_light = if let Some(intersection) = shadow_intersection {
+                    //     intersection.distance > light.distance(&surface_hit)
+                    // } else {
+                    //     true
+                    // };
+                    let in_light = true;
+
+                    let light_intensity = if in_light {
+                        light.intensity(&surface_hit)
+                    } else {
+                        0.0
+                    };
+                    let light_power =
+                        vec3_dot(surface_normal, direction_to_light).max(0.0) * light_intensity;
+                    let light_reflected = intersection.element.albedo() / std::f64::consts::PI;
+
+                    let element_color = *intersection.element.color();
+                    let light_color = *light.color() * light_power * light_reflected;
+
+                    color += element_color * light_color;
+                }
+                
+                let delta = loop {
+                    let delta = [
+                        rand::thread_rng().gen_range(0.0..1.0),
+                        rand::thread_rng().gen_range(0.0..1.0),
+                        rand::thread_rng().gen_range(0.0..1.0),
+                    ];
+                    if vec3_square_len(delta) < 1.0 {
+                        break delta;
+                    }
+                };
+                let bounced_ray = Ray {
+                    origin: vec3_add(surface_hit, delta),
+                    direction: surface_normal,
+                };
+
+                (color, bounced_ray)
+            }
+        }
+    }
+
+    pub fn color(&self) -> &Color {
+        match self {
+            Material::Lambertian { color, .. } => color,
+        }
+    }
+
+    pub fn albedo(&self) -> f64 {
+        match self {
+            Material::Lambertian { albedo, .. } => *albedo,
+        }
+    }
 }
 
 pub enum Light {
@@ -127,15 +212,22 @@ pub enum Element {
 impl Element {
     pub fn color(&self) -> &Color {
         match self {
-            Element::Sphere(s) => &s.color,
-            Element::Plane(p) => &p.color,
+            Element::Sphere(s) => &s.material.color(),
+            Element::Plane(p) => &p.material.color(),
         }
     }
 
     pub fn albedo(&self) -> f64 {
         match self {
-            Element::Sphere(s) => s.albedo,
-            Element::Plane(p) => p.albedo,
+            Element::Sphere(s) => s.material.albedo(),
+            Element::Plane(p) => p.material.albedo(),
+        }
+    }
+
+    pub fn material(&self) -> &Material {
+        match self {
+            Element::Sphere(s) => &s.material,
+            Element::Plane(p) => &p.material,
         }
     }
 }
@@ -169,6 +261,7 @@ impl Scene {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Ray {
     pub origin: Vector3<f64>,
     pub direction: Vector3<f64>,
@@ -212,9 +305,13 @@ impl Intersectable for Sphere {
 
         if adjacent_left_half < 0.0 && adjacent_right_half < 0.0 {
             return None;
+        } else if adjacent_left_half < 0.0 {
+            Some(adjacent_right_half)
+        } else if adjacent_right_half < 0.0 {
+            Some(adjacent_left_half)
+        } else {
+            Some(adjacent_left_half.min(adjacent_right_half))
         }
-
-        Some(adjacent_left_half.min(adjacent_right_half))
     }
 
     fn surface_normal(&self, hit_point: &Vector3<f64>) -> Vector3<f64> {
@@ -256,48 +353,47 @@ impl Intersectable for Element {
     }
 }
 
-fn get_color(scene: &Scene, ray: &Ray, intersection: &Intersection) -> Color {
-    let hit_point = vec3_add(
-        ray.origin,
-        vec3_mul(ray.direction, [intersection.distance; 3]),
-    );
-    let surface_normal = intersection.element.surface_normal(&hit_point);
-
-    let mut color = Color {
-        red: 0.0,
-        green: 0.0,
-        blue: 0.0,
+fn get_color(scene: &Scene, ray: &Ray) -> Color {
+    let mut current_ray = *ray;
+    let mut current_color = Color {
+        red: 1.0,
+        green: 1.0,
+        blue: 1.0,
     };
 
-    for light in &scene.lights {
-        let direction_to_light = light.direction(&hit_point);
+    for _ in 0..500 {
+        let intersection = scene.trace(&current_ray);
 
-        let shadow_ray = Ray {
-            origin: vec3_add(hit_point, vec3_mul(surface_normal, [scene.shadow_bias; 3])),
-            direction: direction_to_light,
-        };
-        let shadow_intersection = scene.trace(&shadow_ray);
-        let in_light = if let Some(intersection) = shadow_intersection {
-            intersection.distance > light.distance(&hit_point)
-        } else {
-            true
-        };
+        if intersection.is_none() {
+            let unit_direction = vec3_normalized(current_ray.direction);
+            let t = 0.5 * (unit_direction[1] + 1.0);
+            return current_color * Color {
+                red: (1.0 - t) * 1.0 + t * 0.5,
+                green: (1.0 - t) * 1.0 + t * 0.7,
+                blue: (1.0 - t) * 1.0 + t * 1.0,
+            };
+        }
 
-        let light_intensity = if in_light {
-            light.intensity(&hit_point)
-        } else {
-            0.0
-        };
-        let light_power = vec3_dot(surface_normal, direction_to_light).max(0.0) * light_intensity;
-        let light_reflected = intersection.element.albedo() / std::f64::consts::PI;
+        let intersection = intersection.as_ref().unwrap();
 
-        let element_color = *intersection.element.color();
-        let light_color = *light.color() * light_power * light_reflected;
+        let surface_hit = vec3_add(
+            current_ray.origin,
+            vec3_mul(current_ray.direction, [intersection.distance; 3]),
+        );
+        let surface_normal = intersection.element.surface_normal(&surface_hit);
 
-        color += element_color * light_color;
+        let (color, ray) = intersection.element.material().scatter(
+            scene,
+            intersection,
+            surface_hit,
+            surface_normal,
+        );
+
+        current_ray = ray;
+        current_color = current_color * color;
     }
 
-    color.clamp()
+    current_color
 }
 
 const CHANNELS: usize = 3;
@@ -314,36 +410,42 @@ fn render(py: Python<'_>, width: usize, height: usize, fov: f64) -> PyResult<&'_
             Element::Sphere(Sphere {
                 origin: [0.0, 0.0, -5.0],
                 radius: 1.0,
-                color: Color {
-                    red: 0.4,
-                    green: 1.0,
-                    blue: 0.4,
+                material: Material::Lambertian {
+                    color: Color {
+                        red: 0.4,
+                        green: 1.0,
+                        blue: 0.4,
+                    },
+                    albedo: 0.20,
                 },
-                albedo: 0.20,
             }),
             Element::Sphere(Sphere {
                 origin: [1.0, 1.0, -4.0],
                 radius: 1.5,
-                color: Color {
-                    red: 0.7,
-                    green: 0.5,
-                    blue: 0.3,
+                material: Material::Lambertian {
+                    color: Color {
+                        red: 0.7,
+                        green: 0.5,
+                        blue: 0.3,
+                    },
+                    albedo: 0.20,
                 },
-                albedo: 0.20,
             }),
             Element::Plane(Plane {
                 origin: [0.0, -2.0, -5.0],
                 normal: [0.0, -1.0, 0.0],
-                color: Color {
-                    red: 0.5,
-                    blue: 0.5,
-                    green: 0.5,
+                material: Material::Lambertian {
+                    color: Color {
+                        red: 0.5,
+                        blue: 0.5,
+                        green: 0.5,
+                    },
+                    albedo: 0.20,
                 },
-                albedo: 0.20,
             }),
         ],
         lights: vec![Light::Directional {
-            direction: [-0.5, -1.0, -1.0],
+            direction: [5.0, -5.0, 1.0],
             color: Color {
                 red: 1.0,
                 blue: 1.0,
@@ -358,18 +460,8 @@ fn render(py: Python<'_>, width: usize, height: usize, fov: f64) -> PyResult<&'_
         .par_bridge()
         .map(|(x, y)| {
             let ray = Ray::create_prime(x, y, &scene);
-
-            if let Some(intersection) = scene.trace(&ray) {
-                let Color { red, green, blue } = get_color(&scene, &ray, &intersection);
-                (x, y, red, green, blue)
-            } else {
-                let unit_direction = vec3_normalized(ray.direction);
-                let t = 0.5 * (unit_direction[1] + 1.0);
-                let r = (1.0 - t) * 1.0 + t * 0.5;
-                let g = (1.0 - t) * 1.0 + t * 0.7;
-                let b = (1.0 - t) * 1.0 + t * 1.0;
-                (x, y, r, g, b)
-            }
+            let color = get_color(&scene, &ray);
+            (x, y, color.red, color.green, color.blue)
         })
         .collect::<Vec<_>>();
 
