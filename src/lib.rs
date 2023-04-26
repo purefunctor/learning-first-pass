@@ -1,3 +1,5 @@
+use std::ops::{Add, Mul, AddAssign};
+
 use itertools::iproduct;
 use ndarray::Array3;
 use numpy::ToPyArray;
@@ -9,18 +11,63 @@ use pyo3::{
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 use vecmath::{vec3_add, vec3_dot, vec3_mul, vec3_neg, vec3_normalized, vec3_sub, Vector3};
 
+#[derive(Clone, Copy)]
 pub struct Color {
     pub red: f64,
-    pub blue: f64,
     pub green: f64,
+    pub blue: f64,
 }
 
 impl Color {
     pub fn clamp(&self) -> Color {
         Color {
-            red: self.red.min(1.0).max(0.0),
-            blue: self.blue.min(1.0).max(0.0),
-            green: self.green.min(1.0).max(0.0),
+            red: self.red.clamp(0.0, 1.0),
+            green: self.green.clamp(0.0, 1.0),
+            blue: self.blue.clamp(0.0, 1.0),
+        }
+    }
+}
+
+impl Add for Color {
+    type Output = Color;
+
+    fn add(self, other: Self) -> Self::Output {
+        Color {
+            red: self.red + other.red,
+            green: self.green + other.green,
+            blue: self.blue + other.blue,
+        }
+    }
+}
+
+impl AddAssign for Color {
+    fn add_assign(&mut self, other: Self) {
+        self.red += other.red;
+        self.green += other.green;
+        self.blue += other.blue;
+    }
+}
+
+impl Mul<f64> for Color {
+    type Output = Color;
+
+    fn mul(self, other: f64) -> Self::Output {
+        Color {
+            red: self.red * other,
+            green: self.green * other,
+            blue: self.blue * other,
+        }
+    }
+}
+
+impl Mul<Color> for Color {
+    type Output = Color;
+
+    fn mul(self, other: Color) -> Self::Output {
+        Color {
+            red: self.red * other.red,
+            green: self.green * other.green,
+            blue: self.blue * other.blue,
         }
     }
 }
@@ -216,7 +263,11 @@ fn get_color(scene: &Scene, ray: &Ray, intersection: &Intersection) -> Color {
     );
     let surface_normal = intersection.element.surface_normal(&hit_point);
 
-    let mut color = Color { red: 0.0, green: 0.0, blue: 0.0 };
+    let mut color = Color {
+        red: 0.0,
+        green: 0.0,
+        blue: 0.0,
+    };
 
     for light in &scene.lights {
         let direction_to_light = light.direction(&hit_point);
@@ -231,7 +282,7 @@ fn get_color(scene: &Scene, ray: &Ray, intersection: &Intersection) -> Color {
         } else {
             true
         };
-    
+
         let light_intensity = if in_light {
             light.intensity(&hit_point)
         } else {
@@ -239,29 +290,14 @@ fn get_color(scene: &Scene, ray: &Ray, intersection: &Intersection) -> Color {
         };
         let light_power = vec3_dot(surface_normal, direction_to_light).max(0.0) * light_intensity;
         let light_reflected = intersection.element.albedo() / std::f64::consts::PI;
-    
-        let Color {
-            red: element_red,
-            green: element_green,
-            blue: element_blue,
-        } = *intersection.element.color();
-    
-        let Color {
-            red: light_red,
-            green: light_green,
-            blue: light_blue,
-        } = light.color();
-    
-        color.red += element_red * light_red * light_power * light_reflected;
-        color.green += element_green * light_green * light_power * light_reflected;
-        color.blue += element_blue * light_blue * light_power * light_reflected;
+
+        let element_color = *intersection.element.color();
+        let light_color = *light.color() * light_power * light_reflected;
+
+        color += element_color * light_color;
     }
 
-    color.red = color.red.clamp(0.0, 1.0);
-    color.green = color.green.clamp(0.0, 1.0);
-    color.blue = color.blue.clamp(0.0, 1.0);
-
-    color
+    color.clamp()
 }
 
 const CHANNELS: usize = 3;
