@@ -66,8 +66,8 @@ impl Material {
                 let scattered = Ray::new(hit.point, direction);
 
                 Some((Color::new(1.0, 1.0, 1.0), scattered))
-            },
-            Material::Diffuse { albedo } => {
+            }
+            Material::Diffuse { .. } => {
                 return None;
             }
         }
@@ -77,6 +77,15 @@ impl Material {
         match self {
             Material::Diffuse { albedo } => *albedo,
             _ => Color::new(0.0, 0.0, 0.0),
+        }
+    }
+
+    pub fn albedo_features(&self) -> [f64; 3] {
+        match self {
+            Material::Lambertian { albedo }
+            | Material::Metal { albedo, .. }
+            | Material::Diffuse { albedo } => [albedo.x(), albedo.y(), albedo.z()],
+            Material::Dielectric { .. } => [0.0, 0.0, 0.0],
         }
     }
 }

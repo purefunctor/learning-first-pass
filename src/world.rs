@@ -3,6 +3,17 @@ use crate::{hit::Hit, material::Material, ray::Ray, vec3::Vec3};
 #[derive(Clone, Copy)]
 pub enum ObjectKind {
     Sphere { origin: Vec3, radius: f64 },
+    Plane { origin: Vec3, normal: Vec3 },
+}
+
+impl ObjectKind {
+    pub fn origin_features(&self) -> [f64; 3] {
+        match self {
+            ObjectKind::Sphere { origin, .. } | ObjectKind::Plane { origin, .. } => {
+                [origin.x(), origin.y(), origin.z()]
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -47,6 +58,29 @@ impl Object {
                 hit.set_face_normal(ray, outward_normal);
 
                 Some(hit)
+            }
+            ObjectKind::Plane { origin, normal } => {
+                let denominator = normal.dot(ray.direction);
+
+                if denominator > 1e-6 {
+                    let to_origin = origin - ray.origin;
+                    let distance = to_origin.dot(normal) / denominator;
+
+                    if distance >= 0.0 {
+                        let hit = Hit {
+                            t: distance,
+                            object: *self,
+                            normal: Vec3::new(0.0, 0.0, 0.0),
+                            front_face: false,
+                            point: ray.origin + distance * ray.direction,
+                        };
+                        Some(hit)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
             }
         }
     }

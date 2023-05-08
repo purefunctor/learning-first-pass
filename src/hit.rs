@@ -21,4 +21,12 @@ impl Hit {
             -1.0 * outward_normal
         }
     }
+
+    pub fn origin_features(&self) -> [f64; 3] {
+        [self.point.x(), self.point.y(), self.point.z()]
+    }
+
+    pub fn normal_features(&self) -> [f64; 3] {
+        [self.point.x(), self.point.y(), self.point.z()]
+    }
 }

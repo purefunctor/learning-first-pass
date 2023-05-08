@@ -6,7 +6,7 @@ import torch
 import wandb
 
 from lru import LRU
-from sphere_world import SphereWorld
+from sphere_world import SphereWorld, CHANNELS
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 import torch_directml
@@ -73,7 +73,7 @@ class Raycaster(nn.Module):
     def __init__(self):
         super().__init__()
         self.sequence = nn.Sequential(
-            nn.Conv2d(in_channels=23, out_channels=128, kernel_size=3, padding="same"),
+            nn.Conv2d(in_channels=CHANNELS, out_channels=128, kernel_size=3, padding="same"),
             nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, padding="same"),
