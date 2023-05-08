@@ -12,6 +12,7 @@ pub enum Material {
     Lambertian { albedo: Color },
     Metal { albedo: Color, fuzz: f64 },
     Dielectric { index_of_refraction: f64 },
+    Diffuse { albedo: Color },
 }
 
 impl Material {
@@ -65,7 +66,17 @@ impl Material {
                 let scattered = Ray::new(hit.point, direction);
 
                 Some((Color::new(1.0, 1.0, 1.0), scattered))
+            },
+            Material::Diffuse { albedo } => {
+                return None;
             }
+        }
+    }
+
+    pub fn emitted(&self) -> Color {
+        match self {
+            Material::Diffuse { albedo } => *albedo,
+            _ => Color::new(0.0, 0.0, 0.0),
         }
     }
 }

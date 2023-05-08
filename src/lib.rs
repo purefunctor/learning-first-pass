@@ -38,6 +38,17 @@ pub fn random_scene(rng: &mut ChaCha8Rng) -> World {
     };
     scene.push(ground);
 
+    let light = Object {
+        kind: ObjectKind::Sphere {
+            origin: Point3::new(0.0, 1000.0, 0.0),
+            radius: 750.0,
+        },
+        material: Material::Diffuse {
+            albedo: Color::new(1.0, 1.0, 1.0),
+        },
+    };
+    scene.push(light);
+
     for a in -2..=2 {
         for b in -2..=2 {
             let random_material: f64 = rng.gen();
@@ -78,43 +89,43 @@ pub fn random_scene(rng: &mut ChaCha8Rng) -> World {
     World(scene)
 }
 
-pub fn ray_info(rng: &mut ChaCha8Rng, ray: &Ray, world: &World) -> (Info, Color) {
-    if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
-        if let Some((attenuation, ray)) = hit.object.material.scatter(rng, ray, &hit) {
-            let info = Info::from_hit(hit, attenuation);
-            let color = attenuation * ray_deep(rng, &ray, world, 100);
-            (info, color)
-        } else {
-            (Info::from_nothing(), Color::new(0.0, 0.0, 0.0))
-        }
-    } else {
-        let unit_direction = ray.direction.normalized();
-        let t = 0.5 * (unit_direction.y() + 1.0);
-        let color = (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
-        (Info::from_sky(color), color)
-    }
-}
+// pub fn ray_info(rng: &mut ChaCha8Rng, ray: &Ray, world: &World) -> (Info, Color) {
+//     if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
+//         if let Some((attenuation, ray)) = hit.object.material.scatter(rng, ray, &hit) {
+//             let info = Info::from_hit(hit, attenuation);
+//             let color = attenuation * ray_deep(rng, &ray, world, 100);
+//             (info, color)
+//         } else {
+//             (Info::from_nothing(), Color::new(0.0, 0.0, 0.0))
+//         }
+//     } else {
+//         let unit_direction = ray.direction.normalized();
+//         let t = 0.5 * (unit_direction.y() + 1.0);
+//         let color = (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
+//         (Info::from_sky(color), color)
+//     }
+// }
 
-pub fn ray_deep(rng: &mut ChaCha8Rng, ray: &Ray, world: &World, depth: usize) -> Color {
+pub fn ray_deep(rng: &mut ChaCha8Rng, ray: &Ray, world: &World, background: Color) -> Color {
     let mut current_ray = *ray;
     let mut current_color = Color::new(1.0, 1.0, 1.0);
-    for _ in 0..depth {
+
+    for _ in 0..50 {
         if let Some(hit) = world.hit(&current_ray, 0.001, f64::INFINITY) {
             if let Some((attenuation, future_ray)) =
                 hit.object.material.scatter(rng, &current_ray, &hit)
             {
                 current_color *= attenuation;
+                current_color += hit.object.material.emitted();
                 current_ray = future_ray;
             } else {
-                return Color::new(0.0, 0.0, 0.0);
+                return current_color * hit.object.material.emitted();
             }
         } else {
-            let unit_direction = ray.direction.normalized();
-            let t = 0.5 * (unit_direction.y() + 1.0);
-            let sky_color = (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0);
-            return current_color * sky_color;
+            return current_color * background;
         }
     }
+
     current_color
 }
 
@@ -139,9 +150,9 @@ pub struct Info {
     sphere_y: f64,
     sphere_z: f64,
     sphere_r: f64,
-    color_r: f64,
-    color_g: f64,
-    color_b: f64,
+    // color_r: f64,
+    // color_g: f64,
+    // color_b: f64,
     point_x: f64,
     point_y: f64,
     point_z: f64,
@@ -155,23 +166,17 @@ impl Info {
         }
     }
 
-    fn from_sky(color: Color) -> Self {
+    fn from_sky(_: Color) -> Self {
         Self {
             is_sky: 1.0,
-            color_r: color.x(),
-            color_g: color.y(),
-            color_b: color.z(),
             ..Default::default()
         }
     }
 
-    fn from_hit(hit: Hit, color: Color) -> Self {
+    fn from_hit(hit: Hit, _: Color) -> Self {
         let object = hit.object;
         let point = hit.point;
         let mut info = Self {
-            color_r: color.x(),
-            color_g: color.y(),
-            color_b: color.z(),
             point_x: point.x(),
             point_y: point.y(),
             point_z: point.z(),
@@ -204,6 +209,7 @@ impl Info {
                         info.is_dielectric = 1.0;
                         info.di = index_of_refraction;
                     }
+                    Material::Diffuse { .. } => (),
                 }
             }
         }
@@ -256,6 +262,7 @@ impl SphereWorld {
         let distance_to_focus = 10.0;
         let aperture = 0.1;
         let should_blur = false;
+        let background = Color::new(0.0, 0.0, 0.0);
 
         let camera = Camera::new(
             look_from,
@@ -283,7 +290,8 @@ impl SphereWorld {
                 let v = j as f64 / height as f64;
 
                 let ray = camera.ray(&mut rng, u, v);
-                let (pixel_info, mut pixel_color) = ray_info(&mut rng, &ray, &self.scene);
+                let pixel_info = Info::default();
+                let mut pixel_color = ray_deep(&mut rng, &ray, &self.scene, background);
 
                 // whilst subsequent rays do
                 for _ in 0..SAMPLES_PER_PIXEL - 1 {
@@ -294,7 +302,7 @@ impl SphereWorld {
                     let v = (j as f64 + random_v) / (height - 1) as f64;
 
                     let ray = camera.ray(&mut rng, u, v);
-                    pixel_color += ray_info(&mut rng, &ray, &self.scene).1;
+                    pixel_color += ray_deep(&mut rng, &ray, &self.scene, background);
                 }
 
                 let ir = (pixel_color.x() / (SAMPLES_PER_PIXEL as f64)).sqrt();
@@ -330,12 +338,9 @@ impl SphereWorld {
             features[[14, j, i]] = pixel_info.sphere_y;
             features[[15, j, i]] = pixel_info.sphere_z;
             features[[16, j, i]] = pixel_info.sphere_r;
-            features[[17, j, i]] = pixel_info.color_r;
-            features[[18, j, i]] = pixel_info.color_g;
-            features[[19, j, i]] = pixel_info.color_b;
-            features[[20, j, i]] = pixel_info.point_x;
-            features[[21, j, i]] = pixel_info.point_y;
-            features[[22, j, i]] = pixel_info.point_z;
+            features[[17, j, i]] = pixel_info.point_x;
+            features[[18, j, i]] = pixel_info.point_y;
+            features[[19, j, i]] = pixel_info.point_z;
         }
 
         (features, target)
